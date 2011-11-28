@@ -128,12 +128,13 @@ class EncountersController < ApplicationController
     end
 
     if params[:filter] and !params[:filter][:provider].blank?
-     user_person_id = User.find_by_username(params[:filter][:provider]).person_id
-     encounter.provider_id = user_person_id
+      user_person_id = User.find_by_username(params[:filter][:provider]).person_id
+    elsif params[:location] # Migration
+      user_person_id = encounter[:provider_id]
     else
-     user_person_id = User.find_by_user_id(encounter[:provider_id]).person_id
-     encounter.provider_id = user_person_id
+      user_person_id = User.find_by_user_id(encounter[:provider_id]).person_id
     end
+    encounter.provider_id = user_person_id
 
     encounter.save    
 
