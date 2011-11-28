@@ -127,7 +127,7 @@ class EncountersController < ApplicationController
       encounter.encounter_datetime = params['encounter']['encounter_datetime']
     end
 
-    if !params[:filter][:provider].blank?
+    if params[:filter] and !params[:filter][:provider].blank?
      user_person_id = User.find_by_username(params[:filter][:provider]).person_id
      encounter.provider_id = user_person_id
     else
