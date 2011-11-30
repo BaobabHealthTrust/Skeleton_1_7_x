@@ -1,0 +1,61 @@
+body {
+    -moz-user-select:none;                                                      
+  }
+  
+  #information {                                                                
+    border: 5px;                                                                
+    border-style: solid;                                                        
+    border-width: 1px;                                                          
+    font-size: 2em;                                                             
+    padding: 10px;                                                              
+    position: absolute;                                                         
+    text-align: left;                                                         
+    bottom: 100px;                                                                  
+    width: 93%;                                                               
+    height: 65px;                                                              
+    z-index: 20;                                                                
+    -moz-user-select:none;    
+    display: none; 
+    left: 25px;
+    border-radius: 10px 10px 10px 10px;                                                 
+  } 
+
+  .dates { text-align:center; }
+
+  .months { 
+    display: none; 
+    width: 100%;
+  }
+
+  td , th {
+    border-width:1px;
+    border-style:solid;
+    text-align:center;
+    height: 50px;
+    width: 200px;
+    background-color:#CADCEA;
+  }
+
+  th { font-size: 15px; }
+
+  .container { 
+    margin: 0px;
+    text-align: center;
+    width: 97%;
+  }
+
+  #January { display:inline; }
+
+  .title { 
+    font-size: 33px;
+    font-style: normal;
+    font-weight: bold;
+  }
+
+  #next , #previous { float:left; position: absolute; }
+
+  #next { left: 300px; }
+
+  table {
+    height: 70%;
+  }

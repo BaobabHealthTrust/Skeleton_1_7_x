@@ -1,0 +1,14 @@
+production:
+ create_from_remote: no
+ use.user.selected.activities: yes
+
+development:
+ create_from_remote: no
+ use.user.selected.activities: yes
+
+test: &TEST
+ create_from_remote: no
+ use.user.selected.activities: yes
+
+cucumber:
+  <<: *TEST

@@ -1,0 +1,23 @@
+production:
+   adapter: mysql
+   database: openmrs17
+   username: root
+   password: yammyuk
+   host: localhost
+
+development:
+  adapter: mysql
+  database: openmrs17
+  username: root
+  password: yammyuk
+  host: localhost
+
+test: &TEST
+  adapter: mysql
+  database: openmrs15
+  username: yamiko
+  password: bart
+  host: localhost
+
+cucumber:
+  <<: *TEST

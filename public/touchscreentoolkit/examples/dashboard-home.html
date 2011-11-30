@@ -1,0 +1,49 @@
+<html>
+    <head>
+        <title>Home Page</title>
+        <script type="text/javascript" language="javascript" src="lib/javascripts/touchScreenToolkit.js" defer ></script>
+        <meta http-equiv='content-type' content='text/html;charset=UTF-8' />
+        <script language="javascript">
+            tstUsername = "";
+            tt_cancel_destination = '';
+            tt_cancel_show = '';
+        </script>
+    </head>
+    <body>
+        <div id="home">
+            <div id="project_name">
+                title
+            </div>
+            <select id="tabs">
+                <option value="">
+                    Overview
+                </option>
+                <option value="">
+                    Reports
+                </option>
+
+                <option value="">
+                    Administration
+                </option>
+
+            </select>
+
+            <div id="facility">Facility</div>
+            <div id="location">Workstation Location</div>
+
+            <div id="date">
+                <script type="text/javascript" language="javascript">
+                    (new Date()).getFullYear() + "-" + ((new Date()).getMonth() + 1) + "-" + (new Date()).getDay()
+                </script>
+            </div>
+            <div id="user">User Name</div>
+
+            <select id="links">
+                <option value='' link='/logout'>Logout</option>
+                <option value='' link='' ttSize="290px">Find / Register Patient</option>
+                <option value=''  ttSize="100px">Set Date</option>
+            </select>
+
+        </div>
+    </body>
+</html>

@@ -1,0 +1,27 @@
+region_1:  
+  region_id: 1
+  name: Central Region
+  creator: 1
+  date_created: 2011-07-27 11:56:01 
+  retired: 0 
+  retired_by:  
+  date_retired:  
+  retire_reason:
+region_2:  
+  region_id: 2
+  name: Northern Region
+  creator: 1
+  date_created: 2011-07-27 11:56:22 
+  retired: 0 
+  retired_by:  
+  date_retired:  
+  retire_reason:
+region_3:  
+  region_id: 3
+  name: Southern Region
+  creator: 1
+  date_created: 2011-07-27 11:56:13 
+  retired: 0 
+  retired_by:  
+  date_retired:  
+  retire_reason:
