@@ -525,10 +525,7 @@ class ApplicationController < ActionController::Base
                                       patient.id,EncounterType.find_by_name(type).id])
 
           if hiv_staging.blank? and user_selected_activities.match(/Manage HIV staging visits/i) 
-            extended_staging_questions = CoreService.get_global_property_value('use.extended.staging.questions')
-            extended_staging_questions = extended_staging_questions.to_s == 'true' rescue false
-            task.url = "/encounters/new/hiv_staging?show&patient_id=#{patient.id}" if not extended_staging_questions 
-            task.url = "/encounters/new/llh_hiv_staging?show&patient_id=#{patient.id}" if extended_staging_questions
+            task.url = "/encounters/new/hiv_staging?show&patient_id=#{patient.id}"
             return task
           elsif hiv_staging.blank? and not user_selected_activities.match(/Manage HIV staging visits/i)
             task.url = "/patients/show/#{patient.id}"
@@ -680,7 +677,7 @@ class ApplicationController < ActionController::Base
             return task
           end if not reason_for_art.upcase ==  'UNKNOWN'
         when 'TB ADHERENCE'
-          drugs_given_before = (not drug_given_before(patient,session_date).prescriptions.blank?) rescue false
+          drugs_given_before = (not PatientService.drug_given_before(patient,session_date).prescriptions.blank?) rescue false
            
           tb_adherence = Encounter.find(:first,:order => "encounter_datetime DESC,date_created DESC",
                                     :conditions =>["DATE(encounter_datetime) = ? AND patient_id = ? AND encounter_type = ?",
@@ -694,7 +691,7 @@ class ApplicationController < ActionController::Base
             return task
           end if drugs_given_before
         when 'ART ADHERENCE'
-          art_drugs_given_before = (not drug_given_before(patient,session_date).arv.prescriptions.blank?) rescue false
+          art_drugs_given_before = (not PatientService.drug_given_before(patient,session_date).arv.prescriptions.blank?) rescue false
 
           art_adherence = Encounter.find(:first,:order => "encounter_datetime DESC,date_created DESC",
                                     :conditions =>["DATE(encounter_datetime) = ? AND patient_id = ? AND encounter_type = ?",
@@ -916,10 +913,7 @@ class ApplicationController < ActionController::Base
           end if reason_for_art.upcase ==  'UNKNOWN'
         when 'HIV STAGING'
           if encounter_available.blank? and user_selected_activities.match(/Manage HIV staging visits/i) 
-            extended_staging_questions = CoreService.get_global_property_value('use.extended.staging.questions')
-            extended_staging_questions = extended_staging_questions.to_s == 'true' rescue false
-            task.url = "/encounters/new/hiv_staging?show&patient_id=#{patient.id}" if not extended_staging_questions 
-            task.url = "/encounters/new/llh_hiv_staging?show&patient_id=#{patient.id}" if extended_staging_questions
+            task.url = "/encounters/new/hiv_staging?show&patient_id=#{patient.id}"
             return task
           elsif encounter_available.blank? and not user_selected_activities.match(/Manage HIV staging visits/i)
             task.url = "/patients/show/#{patient.id}"
@@ -1005,7 +999,7 @@ class ApplicationController < ActionController::Base
           elsif encounter_available.blank? and not user_selected_activities.match(/Manage ART adherence/i)
             task.url = "/patients/show/#{patient.id}"
             return task
-          end if not drug_given_before(patient,session_date).blank?
+          end if not PatientService.drug_given_before(patient,session_date).blank?
       end
     end
     #task.encounter_type = 'Visit complete ...'
@@ -1127,7 +1121,7 @@ class ApplicationController < ActionController::Base
         skip = true unless enc.present?
       end
 
-      if task.encounter_type == 'ART ADHERENCE' and drug_given_before(patient,session_date).blank?
+      if task.encounter_type == 'ART ADHERENCE' and PatientService.drug_given_before(patient,session_date).blank?
         skip = true
       end
       

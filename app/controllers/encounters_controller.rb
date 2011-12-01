@@ -1,7 +1,7 @@
 class EncountersController < ApplicationController
   def create(params=params, session=session)
     #raise params.to_yaml
-
+	
     if params['encounter']['encounter_type_name'] == 'TB_INITIAL'
       (params[:observations] || []).each do |observation|
         if observation['concept_name'].upcase == 'TRANSFER IN' and observation['value_coded_or_text'] == "YES"
@@ -108,8 +108,7 @@ class EncountersController < ApplicationController
       Location.current_location = Location.find(params[:location])
     end
     
-    if params['encounter']['encounter_type_name'].to_s.upcase == "APPOINTMENT" &&
-      !params[:report_url].to_s.match(/report/).nil?
+    if params['encounter']['encounter_type_name'].to_s.upcase == "APPOINTMENT" && !params[:report_url].nil? && !params[:report_url].match(/report/).nil?
         concept_id = ConceptName.find_by_name("RETURN VISIT DATE").concept_id
         encounter_id_s = Observation.find_by_sql("SELECT encounter_id
                        FROM obs
@@ -128,14 +127,13 @@ class EncountersController < ApplicationController
       encounter.encounter_datetime = params['encounter']['encounter_datetime']
     end
 
-    if params[:filter] and !params[:filter][:provider].blank?
-      user_person_id = User.find_by_username(params[:filter][:provider]).person_id
-    elsif params[:location] # Migration
-      user_person_id = encounter[:provider_id]
+    if !params[:filter][:provider].blank?
+     user_person_id = User.find_by_username(params[:filter][:provider]).person_id
+     encounter.provider_id = user_person_id
     else
-      user_person_id = User.find_by_user_id(encounter[:provider_id]).person_id
+     user_person_id = User.find_by_user_id(encounter[:provider_id]).person_id
+     encounter.provider_id = user_person_id
     end
-    encounter.provider_id = user_person_id
 
     encounter.save    
 
@@ -166,6 +164,22 @@ class EncountersController < ApplicationController
         observation[:value_coded_or_text_multiple].compact!
         observation[:value_coded_or_text_multiple].reject!{|value| value.blank?}
       end  
+      
+      # convert values from 'mmol/litre' to 'mg/declitre'
+      if(observation[:measurement_unit])
+        observation[:value_numeric] = observation[:value_numeric].to_f * 18 if ( observation[:measurement_unit] == "mmol/l")
+        observation.delete(:measurement_unit)
+      end
+
+      if(observation[:parent_concept_name])
+        concept_id = Concept.find_by_name(observation[:parent_concept_name]).id rescue nil
+        observation[:obs_group_id] = Observation.find(:first, :conditions=> ['concept_id = ? AND encounter_id = ?',concept_id, encounter.id]).id rescue ""
+        observation.delete(:parent_concept_name)
+      end
+      
+      extracted_value_numerics = observation[:value_numeric]
+      extracted_value_coded_or_text = observation[:value_coded_or_text]
+
       if observation[:value_coded_or_text_multiple] && observation[:value_coded_or_text_multiple].is_a?(Array) && !observation[:value_coded_or_text_multiple].blank?
         
         values = observation.delete(:value_coded_or_text_multiple)
@@ -175,7 +189,14 @@ class EncountersController < ApplicationController
                 observation[:accession_number] = Observation.new_accession_number 
             end
             Observation.create(observation) 
-        end    
+        end
+      elsif extracted_value_numerics.class == Array
+            
+        extracted_value_numerics.each do |value_numeric|
+          observation[:value_numeric] = value_numeric
+          Observation.create(observation)
+        end
+        
       else      
         observation.delete(:value_coded_or_text_multiple)
 
@@ -269,7 +290,7 @@ class EncountersController < ApplicationController
      elsif params['encounter']['encounter_type_name'] == "TB suspect source of referral" && !params[:gender].empty? && !params[:family_name].empty? && !params[:given_name].empty?
        redirect_to"/encounters/new/tb_suspect_source_of_referral/?patient_id=#{@patient.id}&gender=#{params[:gender]}&family_name=#{params[:family_name]}&given_name=#{params[:given_name]}"
      else
-      if params['encounter']['encounter_type_name'].to_s.upcase == "APPOINTMENT" && !params[:report_url].match(/report/).nil?
+      if params['encounter']['encounter_type_name'].to_s.upcase == "APPOINTMENT" && !params[:report_url].nil? && !params[:report_url].match(/report/).nil?
          redirect_to  params[:report_url].to_s and return
       end
       redirect_to next_task(@patient)
@@ -1156,6 +1177,83 @@ class EncountersController < ApplicationController
 
   def new_appointment                                                   
     #render :layout => "menu"                                                    
+  end
+  
+  def update
+
+    @encounter = Encounter.find(params[:encounter_id])
+    ActiveRecord::Base.transaction do
+      @encounter.void
+    end
+    
+    encounter = Encounter.new(params[:encounter])
+    encounter.encounter_datetime = session[:datetime] unless session[:datetime].blank? or encounter.name == 'DIABETES TEST'
+    encounter.save
+
+       # saving  of encounter states
+    if(params[:complete])
+      encounter_state = EncounterState.find(encounter.encounter_id) rescue nil
+
+      if(encounter_state) # update an existing encounter_state
+        state =  params[:complete] == "true"? 1 : 0
+        EncounterState.update_attributes(:encounter_id => encounter.encounter_id, :state => state)
+      else # a new encounter_state
+        state =  params[:complete] == "true"? 1 : 0
+        EncounterState.create(:encounter_id => encounter.encounter_id, :state => state)
+      end
+    end
+
+    (params[:observations] || []).each{|observation|
+      # Check to see if any values are part of this observation
+      # This keeps us from saving empty observations
+      values = "coded_or_text group_id boolean coded drug datetime numeric modifier text".split(" ").map{|value_name|
+        observation["value_#{value_name}"] unless observation["value_#{value_name}"].blank? rescue nil
+      }.compact
+
+      next if values.length == 0
+      observation.delete(:value_text) unless observation[:value_coded_or_text].blank?
+      observation[:encounter_id] = encounter.id
+      observation[:obs_datetime] = encounter.encounter_datetime ||= Time.now()
+      observation[:person_id] ||= encounter.patient_id
+      observation[:concept_name] ||= "OUTPATIENT DIAGNOSIS" if encounter.type.name == "OUTPATIENT DIAGNOSIS"
+
+      # convert values from 'mmol/litre' to 'mg/declitre'
+      if(observation[:measurement_unit])
+        observation[:value_numeric] = observation[:value_numeric].to_f * 18 if ( observation[:measurement_unit] == "mmol/l")
+        observation.delete(:measurement_unit)
+      end
+
+      if(observation[:parent_concept_name])
+        concept_id = Concept.find_by_name(observation[:parent_concept_name]).id rescue nil
+        observation[:obs_group_id] = Observation.find(:first, :conditions=> ['concept_id = ? AND encounter_id = ?',concept_id, encounter.id]).id rescue ""
+        observation.delete(:parent_concept_name)
+      end
+
+      concept_id = Concept.find_by_name(observation[:concept_name]).id rescue nil
+      obs_id = Observation.find(:first, :conditions=> ['concept_id = ? AND encounter_id = ?',concept_id, encounter.id]).id rescue nil
+
+      extracted_value_numerics = observation[:value_numeric]
+      if (extracted_value_numerics.class == Array)
+
+        extracted_value_numerics.each do |value_numeric|
+          observation[:value_numeric] = value_numeric
+          Observation.create(observation)
+        end
+      else
+        Observation.create(observation)
+      end
+              
+    }
+
+    @patient = Patient.find(params[:encounter][:patient_id])
+
+    # redirect to a custom destination page 'next_url'
+    #if(params[:next_url])
+      redirect_to "/patients/show/#{@patient.patient_id}" and return
+    #else
+    #  redirect_to next_task(@patient)
+    #end
+
   end
 
 end

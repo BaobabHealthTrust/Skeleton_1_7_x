@@ -15,11 +15,15 @@ class PrescriptionsController < ApplicationController
 		@current_height = PatientService.get_patient_attribute_value(@patient, "current_height")
   end
   
-  def void 
+  def void	
     @order = Order.find(params[:order_id])
     @order.void
     flash.now[:notice] = "Order was successfully voided"
-    index and return
+    if !params[:source].blank? && params[:source].to_s == 'advanced'
+		redirect_to "/prescriptions/advanced_prescription?patient_id=#{params[:patient_id]}" and return
+    else
+    	index and return
+   	end
   end
   
   def create
@@ -194,5 +198,131 @@ class PrescriptionsController < ApplicationController
           ConceptName.find_by_name("DIAGNOSIS").concept_id,
           ConceptName.find_by_name("DIAGNOSIS, NON-CODED").concept_id])
     }.flatten.compact
+  end
+  
+  def advanced_prescription
+    @patient = Patient.find(params[:patient_id] || params[:id] || session[:patient_id]) rescue nil
+
+    @orders = DiabetesService.current_orders(@patient) rescue []
+
+    diabetes_id = Concept.find_by_name("DIABETES MEDICATION").id
+
+    @patient_diabetes_treatements     = []
+    @patient_hypertension_treatements = []
+
+    DiabetesService.treatments(@patient).map{|treatement|
+
+
+      if (treatement.diagnosis_id.to_i == diabetes_id && DiabetesService.treatments(@patient).first.start_date.to_date == treatement.start_date.to_date)
+        @patient_diabetes_treatements << treatement
+      elsif(DiabetesService.treatments(@patient).first.start_date.to_date == treatement.start_date.to_date)
+        @patient_hypertension_treatements << treatement
+      end
+    }
+    #raise @patient_diabetes_treatements.to_yaml
+    redirect_to "/prescriptions/advanced_new?patient_id=#{params[:patient_id] || session[:patient_id]}" and return if @patient_diabetes_treatements.blank?   #@orders.blank?
+    render :template => 'prescriptions/advanced_prescription', :layout => 'complications'
+  end
+  
+  def advanced_new
+    @patient = Patient.find(params[:patient_id] || session[:patient_id]) rescue nil
+
+    diabetes_id = Concept.find_by_name("DIABETES MEDICATION").id
+
+    @patient_diabetes_treatements     = []
+    @patient_hypertension_treatements = []
+
+    DiabetesService.treatments(@patient).map{|treatement|
+
+      if (treatement.diagnosis_id.to_i == diabetes_id)
+        @patient_diabetes_treatements << treatement
+      else
+        @patient_hypertension_treatements << treatement
+      end
+    }
+
+  end
+  
+  def advanced_create
+    (params[:prescriptions] || []).each{|prescription|
+      @suggestion = prescription[:suggestion]
+      @patient    = Patient.find(prescription[:patient_id] || session[:patient_id]) rescue nil
+      @encounter  = DiabetesService.current_treatment_encounter(@patient)
+
+      diagnosis_name = prescription[:diagnosis]
+
+      diabetes_clinic = false
+
+      values = "coded_or_text group_id boolean coded drug datetime numeric modifier text".split(" ").map{|value_name|
+        prescription["value_#{value_name}"] unless prescription["value_#{value_name}"].blank? rescue nil
+      }.compact
+
+      next if values.length == 0
+      prescription.delete(:value_text) unless prescription[:value_coded_or_text].blank?
+
+      prescription[:encounter_id]  = @encounter.encounter_id
+      prescription[:obs_datetime]  = @encounter.encounter_datetime ||= Time.now()
+      prescription[:person_id]     = @encounter.patient_id
+
+      diagnosis_observation = Observation.create("encounter_id" => prescription[:encounter_id],
+        "concept_name" => prescription[:concept_name],
+        "obs_datetime" => prescription[:obs_datetime],
+        "person_id" => prescription[:person_id],
+        "value_coded_or_text" => prescription[:value_coded_or_text])
+
+      prescription[:diagnosis]    = diagnosis_observation.id
+
+      @diagnosis = Observation.find(prescription[:diagnosis]) rescue nil
+      diabetes_clinic = true if (['DIABETES MEDICATION','HYPERTENSION','PERIPHERAL NEUROPATHY'].include?(diagnosis_name))
+
+      if diabetes_clinic
+        prescription[:drug_strength] =  "" unless !prescription[:drug_strength].nil?
+
+        prescription[:formulation] = [prescription[:generic], prescription[:drug_strength], prescription[:frequency]]
+
+        drug_info = DiabetesService.drug_details(prescription[:formulation], diagnosis_name).first
+
+        # raise drug_info.inspect
+
+        prescription[:formulation]    = drug_info[:drug_formulation]
+        prescription[:frequency]      = drug_info[:drug_frequency]
+        prescription[:prn]            = drug_info[:drug_prn]
+        prescription[:dose_strength]  = drug_info[:drug_strength]
+      end
+
+      unless (@suggestion.blank? || @suggestion == '0')
+        @order = DrugOrder.find(@suggestion)
+        DrugOrder.clone_order(@encounter, @patient, @diagnosis, @order)
+      else
+        @formulation = (prescription[:formulation] || '').upcase
+
+        @drug = Drug.find_by_name(@formulation) rescue nil
+
+        unless @drug
+          flash[:notice] = "No matching drugs found for formulation #{prescription[:formulation]}"
+          render :new
+          return
+        end
+        start_date = Time.now
+        auto_expire_date = Time.now + prescription[:duration].to_i.days
+        prn = prescription[:prn]
+        if prescription[:type_of_prescription] == "variable"
+          DrugOrder.write_order(@encounter, @patient, @diagnosis, @drug, start_date, auto_expire_date, prescription[:morning_dose], 'MORNING', prn) unless prescription[:morning_dose] == "Unknown" || prescription[:morning_dose].to_f == 0
+          DrugOrder.write_order(@encounter, @patient, @diagnosis, @drug, start_date, auto_expire_date, prescription[:afternoon_dose], 'AFTERNOON', prn) unless prescription[:afternoon_dose] == "Unknown" || prescription[:afternoon_dose].to_f == 0
+          DrugOrder.write_order(@encounter, @patient, @diagnosis, @drug, start_date, auto_expire_date, prescription[:evening_dose], 'EVENING', prn) unless prescription[:evening_dose] == "Unknown" || prescription[:evening_dose].to_f == 0
+          DrugOrder.write_order(@encounter, @patient, @diagnosis, @drug, start_date, auto_expire_date, prescription[:night_dose], 'NIGHT', prn)  unless prescription[:night_dose] == "Unknown" || prescription[:night_dose].to_f == 0
+        else
+          DrugOrder.write_order(@encounter, @patient, @diagnosis, @drug, start_date, auto_expire_date, prescription[:dose_strength], prescription[:frequency], prn)
+        end
+      end
+
+    }
+
+    if(@patient)
+      redirect_to "/prescriptions/advanced_prescription?patient_id=#{@patient.id}"
+    else
+      redirect_to "/prescriptions/advanced_prescription?patient_id=#{params[:patient_id]}"
+    end
+    
   end
 end

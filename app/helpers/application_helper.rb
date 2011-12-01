@@ -15,6 +15,17 @@ module ApplicationHelper
     content
   end
   
+  def img_button_submit_to_with_confirm(url, image, options = {}, params = {})
+    content = ""
+    content << "<form " + ((options[:form_id])?("id=#{options[:form_id]}"):"id='frm_general'") + " method='post' action='#{url}'><input type='image' src='#{image}' " +
+      ((options[:confirm])?("onclick=\"return confirmRecordDeletion('" +
+      options[:confirm] + "', '" + ((options[:form_id])?("#{options[:form_id]}"):"frm_general") + "')\""):"") + "/>"
+
+    params.each {|n,v| content << "<input type='hidden' name='#{n}' value='#{v}'/>" }
+    content << "</form>"
+    content
+  end
+  
   def fancy_or_high_contrast_touch
     fancy = get_global_property_value("interface") == "fancy" rescue false
     fancy ? "touch-fancy.css" : "touch.css"
@@ -80,6 +91,10 @@ module ApplicationHelper
   def use_extended_staging_questions
     get_global_property_value('use.extended.staging.questions').to_s == "true" rescue false
   end
+  
+  def prefix
+    get_global_property_value("dc.number.prefix") rescue ""
+  end
 
 	def get_global_property_value(global_property)
 		property_value = Settings[global_property] 
@@ -90,10 +105,10 @@ module ApplicationHelper
 		return property_value
 	end
 
-  def month_name_options
+  def month_name_options(selected_months = [])
     i=0
     options_array = [[]] +Date::ABBR_MONTHNAMES[1..-1].collect{|month|[month,i+=1]} + [["Unknown","Unknown"]]
-    options_for_select(options_array)  
+    options_for_select(options_array, selected_months)  
   end
   
   def age_limit
@@ -212,4 +227,20 @@ module ApplicationHelper
     set.map{|item|next if item.concept.blank? ; item.concept.fullname }
   end
 
+  def convert_time(duration)
+		if(!duration.blank?)
+			if(duration.to_i < 7)
+				(duration.to_i > 0)?(( duration.to_i > 1)? "#{duration} days" :"1 day"): "<i>(New)</i>"
+			elsif(duration.to_i < 30)
+				week = (duration.to_i)/7
+				week > 1? "#{week} weeks" : "1 week"
+			elsif(duration.to_i < 367)
+				month = (duration.to_i)/30
+				month > 1? "#{month} months" : "1 month"
+			else
+				year = (duration.to_i)/365
+				year > 1? "#{year} years" : "1 year"
+			end
+		end
+	end
 end

@@ -23,7 +23,7 @@ class EncounterTypesController < ApplicationController
         end
         roles_for_the_user = roles_for_the_user.uniq
 
-        if GlobalProperty.use_user_selected_activities
+        if use_user_selected_activities
         #redirect_to "/user/activities?patient_id=#{params[:patient_id]}"
         end
         
@@ -31,9 +31,8 @@ class EncounterTypesController < ApplicationController
         @encounter_types = EncounterType.find(:all).map{|enc|enc.name.gsub(/.*\//,"").gsub(/\..*/,"").humanize}
         @available_encounter_types = Dir.glob(RAILS_ROOT+"/app/views/encounters/*.rhtml").map{|file|file.gsub(/.*\//,"").gsub(/\..*/,"").humanize}
         @available_encounter_types -= @available_encounter_types - @encounter_types
-				
 
-        @available_encounter_types = ((@available_encounter_types) - ((@available_encounter_types - roles_for_the_user) + (roles_for_the_user - @available_encounter_types)))
+        #@available_encounter_types = ((@available_encounter_types) - ((@available_encounter_types - roles_for_the_user) + (roles_for_the_user - @available_encounter_types)))
         @available_encounter_types = @available_encounter_types.sort
         
         #@available_encounter_types = @available_encounter_types.sort << "IPT contact person"

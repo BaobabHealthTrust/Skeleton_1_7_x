@@ -460,6 +460,37 @@ class PeopleController < ApplicationController
      'Preschool child','Mechanic','Prisoner','Craftsman','Healthcare Worker','Soldier'].sort.concat(["Other","Unknown"])
   end
 
+  def edit
+    # only allow these fields to prevent dangerous 'fields' e.g. 'destroy!'
+    valid_fields = ['birthdate','gender']
+    unless valid_fields.include? params[:field]
+      redirect_to :controller => 'patients', :action => :demographics, :id => params[:id]
+      return
+    end
+
+    @person = Person.find(params[:id])
+    if request.post? && params[:field]
+      if params[:field]== 'gender'
+        @person.gender = params[:person][:gender]
+      elsif params[:field] == 'birthdate'
+        if params[:person][:birth_year] == "Unknown"
+          @person.set_birthdate_by_age(params[:person]["age_estimate"])
+        else
+          PatientService.set_birthdate(@person, params[:person]["birth_year"],
+                                params[:person]["birth_month"],
+                                params[:person]["birth_day"])
+        end
+        @person.birthdate_estimated = 1 if params[:person]["birthdate_estimated"] == 'true'
+        @person.save
+      end
+      @person.save
+      redirect_to :controller => :patients, :action => :edit_demographics, :id => @person.id
+    else
+      @field = params[:field]
+      @field_value = @person.send(@field)
+    end
+  end
+  
 private
   
   def search_complete_url(found_person_id, primary_person_id)
