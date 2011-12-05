@@ -19,6 +19,16 @@ module MedicationService
 		tb_medication_drug_concepts = ConceptSet.all(:conditions => ['concept_set = ?', tb_medication_concept])
 		tb_medication_drug_concepts
 	end
+	
+	def self.diabetes_medication(drug)
+		diabetes_drugs.map(&:concept_id).include?(drug.concept_id)
+	end	
+	
+	def self.diabetes_drugs
+		diabetes_medication_concept       = ConceptName.find_by_name("DIABETES MEDICATION").concept_id
+		diabetes_medication_drug_concepts = ConceptSet.all(:conditions => ['concept_set = ?', diabetes_medication_concept])
+		diabetes_medication_drug_concepts
+	end
 
   # Convert a list +Concept+s of +Regimen+s for the given +Patient+ <tt>age</tt>
   # into select options. See also +EncountersController#arv_regimen_answers+

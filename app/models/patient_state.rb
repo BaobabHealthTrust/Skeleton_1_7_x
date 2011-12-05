@@ -26,4 +26,10 @@ class PatientState < ActiveRecord::Base
     end
     s
   end
-end
+
+  def name
+		workflow_state = ProgramWorkflowState.find_state state
+		s = workflow_state.concept.concept_names.typed("SHORT").first.name rescue workflow_state.concept.fullname
+    s
+  end
+ end
