@@ -557,7 +557,7 @@ class ApplicationController < ActionController::Base
             return task
           end
         when 'TB VISIT'
-          if PatientService.patient_is_child?((patient) or PatientService.patient_hiv_status(patient).match(/Positive/i)
+          if PatientService.patient_is_child?(patient) or PatientService.patient_hiv_status(patient).match(/Positive/i)
             clinic_visit = Encounter.find(:first,:order => "encounter_datetime DESC,date_created DESC",
                                       :conditions =>["patient_id = ? AND encounter_type = ?",
                                       patient.id,EncounterType.find_by_name('TB CLINIC VISIT').id])
