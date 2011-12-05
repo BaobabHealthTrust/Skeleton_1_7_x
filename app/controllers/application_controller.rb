@@ -184,7 +184,7 @@ class ApplicationController < ActionController::Base
 
       case type
         when 'SOURCE OF REFERRAL'
-          next if patient_tb_status(patient).match(/treatment/i)
+          next if PatientService.patient_tb_status(patient).match(/treatment/i)
 
           if ['Lighthouse','Martin Preuss Centre'].include?(Location.current_health_center.name)
             if not (location.current_location.name.match(/Chronic Cough/) or 
@@ -210,7 +210,7 @@ class ApplicationController < ActionController::Base
           next_task = checks_if_labs_results_are_avalable_to_be_shown(patient , session_date , task)
           return next_task unless next_task.blank?
 
-          next if patient_hiv_status(patient).match(/Positive/i)
+          next if PatientService.patient_hiv_status(patient).match(/Positive/i)
           if not patient.patient_programs.blank?
             next if patient.patient_programs.collect{|p|p.program.name}.include?('HIV PROGRAM') 
           end
@@ -277,7 +277,7 @@ class ApplicationController < ActionController::Base
           end
         when 'VITALS' 
 
-          if not patient_hiv_status(patient).match(/Positive/i) and not patient_tb_status(patient).match(/treatment/i)
+          if not PatientService.patient_hiv_status(patient).match(/Positive/i) and not PatientService.patient_tb_status(patient).match(/treatment/i)
             next
           end 
 
@@ -285,11 +285,11 @@ class ApplicationController < ActionController::Base
                                   :conditions =>["patient_id = ? AND encounter_type = ?",
                                   patient.id,EncounterType.find_by_name(type).id])
 
-          if not patient_tb_status(patient).match(/treatment/i) and not tb_reception_attributes.include?('Any need to see a clinician: Yes')
+          if not PatientService.patient_tb_status(patient).match(/treatment/i) and not tb_reception_attributes.include?('Any need to see a clinician: Yes')
             next
-          end if not patient_hiv_status(patient).match(/Positive/i)
+          end if not PatientService.patient_hiv_status(patient).match(/Positive/i)
 
-          if patient_tb_status(patient).match(/treatment/i) and not patient_hiv_status(patient).match(/Positive/i)
+          if PatientService.patient_tb_status(patient).match(/treatment/i) and not PatientService.patient_hiv_status(patient).match(/Positive/i)
             next
           end if not first_vitals.blank?
 
@@ -320,7 +320,7 @@ class ApplicationController < ActionController::Base
             return task
           end
         when 'LAB ORDERS'
-          next if patient_tb_status(patient).match(/treatment/i)
+          next if PatientService.patient_tb_status(patient).match(/treatment/i)
 
           if ['Lighthouse','Martin Preuss Centre'].include?(Location.current_health_center.name)
             if not (location.current_location.name.match(/Chronic Cough/) or 
@@ -398,7 +398,7 @@ class ApplicationController < ActionController::Base
           end if (next_lab_encounter.blank?)
         when 'TB CLINIC VISIT'
 
-          next if patient_tb_status(patient).match(/treatment/i)
+          next if PatientService.patient_tb_status(patient).match(/treatment/i)
 
           obs_ans = Observation.find(Observation.find(:first, 
                     :order => "obs_datetime DESC,date_created DESC",
@@ -486,7 +486,7 @@ class ApplicationController < ActionController::Base
             return task
           end 
         when 'ART_INITIAL'
-          next unless patient_hiv_status(patient).match(/Positive/i)
+          next unless PatientService.patient_hiv_status(patient).match(/Positive/i)
         
           enrolled_in_hiv_program = Concept.find(Observation.find(:last, :conditions => ["person_id = ? AND concept_id = ?",patient.id, 
             ConceptName.find_by_name("Patient enrolled in IMB HIV program").concept_id]).value_coded).concept_names.map{|c|c.name}[0].upcase rescue nil
@@ -519,7 +519,7 @@ class ApplicationController < ActionController::Base
           next if patient.patient_programs.blank?
           next if not patient.patient_programs.collect{|p|p.program.name}.include?('HIV PROGRAM') 
 
-          next unless patient_hiv_status(patient).match(/Positive/i)
+          next unless PatientService.patient_hiv_status(patient).match(/Positive/i)
           hiv_staging = Encounter.find(:first,:order => "encounter_datetime DESC,date_created DESC",
                                       :conditions =>["patient_id = ? AND encounter_type = ?",
                                       patient.id,EncounterType.find_by_name(type).id])
@@ -536,7 +536,7 @@ class ApplicationController < ActionController::Base
           next_task = need_art_enrollment(task,patient,location,session_date,user_selected_activities,reason_for_art)
           return next_task if not next_task.blank? and user_selected_activities.match(/Manage HIV staging visits/i)
 
-          next unless patient_tb_status(patient).match(/treatment/i)
+          next unless PatientService.patient_tb_status(patient).match(/treatment/i)
           tb_registration = Encounter.find(:first,:order => "encounter_datetime DESC,date_created DESC",
                                       :conditions =>["patient_id = ? AND encounter_type = ?",
                                       patient.id,EncounterType.find_by_name(type).id])
@@ -557,7 +557,7 @@ class ApplicationController < ActionController::Base
             return task
           end
         when 'TB VISIT'
-          if patient_is_child?(patient) or patient_hiv_status(patient).match(/Positive/i)
+          if PatientService.patient_is_child?((patient) or PatientService.patient_hiv_status(patient).match(/Positive/i)
             clinic_visit = Encounter.find(:first,:order => "encounter_datetime DESC,date_created DESC",
                                       :conditions =>["patient_id = ? AND encounter_type = ?",
                                       patient.id,EncounterType.find_by_name('TB CLINIC VISIT').id])
@@ -574,14 +574,14 @@ class ApplicationController < ActionController::Base
               task.encounter_type = "TB CLINIC VISIT"
               task.url = "/patients/show/#{patient.id}"
               return task
-            end if not patient_tb_status(patient).match(/treatment/i)
+            end if not PatientService.patient_tb_status(patient).match(/treatment/i)
           end
 
           #checks if vitals have been taken already 
           vitals = checks_if_vitals_are_need(patient,session_date,task,user_selected_activities)
           return vitals unless vitals.blank?
 
-          if not patient_tb_status(patient).match(/treatment/i)
+          if not PatientService.patient_tb_status(patient).match(/treatment/i)
             next
           end if not tb_reception_attributes.include?('Reason for visit: Follow-up')
 
