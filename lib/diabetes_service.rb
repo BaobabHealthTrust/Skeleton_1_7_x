@@ -294,18 +294,6 @@ end
     return ds_number
   end
   
-  def self.current_orders(patient)
-    encounter = current_treatment_encounter(patient)
-    orders = encounter.orders.active
-    orders
-  end
-  
-  def self.current_treatment_encounter(patient)
-    type = EncounterType.find_by_name("TREATMENT")
-    encounter = patient.encounters.current.find_by_encounter_type(type.id)
-    encounter ||= patient.encounters.create(:encounter_type => type.id)
-  end
-  
   def self.drug_details(drug_info, diagnosis_name)
     #raise drug_info.inspect
     

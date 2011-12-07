@@ -203,7 +203,7 @@ class PrescriptionsController < ApplicationController
   def advanced_prescription
     @patient = Patient.find(params[:patient_id] || params[:id] || session[:patient_id]) rescue nil
 
-    @orders = DiabetesService.current_orders(@patient) rescue []
+    @orders = MedicationService.current_orders(@patient) rescue []
 
     diabetes_id = Concept.find_by_name("DIABETES MEDICATION").id
 
@@ -247,7 +247,7 @@ class PrescriptionsController < ApplicationController
     (params[:prescriptions] || []).each{|prescription|
       @suggestion = prescription[:suggestion]
       @patient    = Patient.find(prescription[:patient_id] || session[:patient_id]) rescue nil
-      @encounter  = DiabetesService.current_treatment_encounter(@patient)
+      @encounter  = MedicationService.current_treatment_encounter(@patient)
 
       diagnosis_name = prescription[:diagnosis]
 
