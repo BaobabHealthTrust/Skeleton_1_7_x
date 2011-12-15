@@ -70,4 +70,53 @@ module MedicationService
     encounter ||= patient.encounters.create(:encounter_type => type.id)
   end
 
+  def self.generic
+    #tag_id = ConceptNameTag.find_by_tag("preferred_qech_aetc_opd").concept_name_tag_id
+ 
+ 		medication_tag = CoreService.get_global_property_value("application_generic_medication")
+ 			   
+    all_drugs = Drug.all.collect {|drug|
+      # [Concept.find(drug.concept_id).name.name, drug.concept_id] rescue nil
+
+      [(drug.concept.fullname rescue drug.concept.shortname rescue ' '), drug.concept_id]
+      #[ConceptName.find(:last, :conditions => ["concept_id = ? AND voided = 0 AND concept_name_id IN (?)", 
+      #      drug.concept_id, ConceptNameTagMap.find(:all, :conditions => ["concept_name_tag_id = ?", tag_id]).collect{|c| 
+      #        c.concept_name_id}]).name, drug.concept_id] rescue nil
+    
+    }.compact.uniq  rescue []
+    
+    if !medication_tag.blank?
+    	application_drugs = concept_set(medication_tag)
+    else
+    	application_drugs = all_drugs
+    end
+    return_drugs = all_drugs - (all_drugs - application_drugs) 
+  end
+
+  
+  def self.frequencies
+    ConceptName.find_by_sql("SELECT name FROM concept_name WHERE concept_id IN \
+                        (SELECT answer_concept FROM concept_answer c WHERE \
+                        concept_id = (SELECT concept_id FROM concept_name \
+                        WHERE name = 'DRUG FREQUENCY CODED')) AND concept_name_id \
+                        IN (SELECT concept_name_id FROM concept_name_tag_map \
+                        WHERE concept_name_tag_id = (SELECT concept_name_tag_id \
+                        FROM concept_name_tag WHERE tag = 'preferred_dmht'))").collect {|freq|
+                            freq.name rescue nil
+                        }.compact rescue []
+  end
+  
+	def self.dosages(generic_drug_concept_id)    
+		Drug.find(:all, :conditions => ["concept_id = ?", generic_drug_concept_id]).collect {|d|
+			["#{d.dose_strength.to_i rescue 1}#{d.units.upcase rescue ""}", "#{d.dose_strength.to_i rescue 1}", "#{d.units.upcase rescue ""}"]
+		}.uniq.compact rescue []
+	end
+	
+  def self.concept_set(concept_name)
+    concept_id = ConceptName.find(:first,:joins =>"INNER JOIN concept USING (concept_id)",
+                                  :conditions =>["voided = 0 AND concept.retired = 0 AND name = ?",concept_name]).concept_id
+    set = ConceptSet.find_all_by_concept_set(concept_id, :order => 'sort_weight')
+    options = set.map{|item|next if item.concept.blank? ; [item.concept.fullname, item.concept.concept_id] }
+    return options
+  end
 end
