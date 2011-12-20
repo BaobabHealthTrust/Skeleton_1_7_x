@@ -382,4 +382,8 @@ end
       :group => "concept.concept_id, drug.name, drug.dose_strength")
   end
 
+  def self.dc_number_prefix
+    site_prefix = CoreService.get_global_property_value('dc.number.prefix')
+    return site_prefix
+  end
 end
