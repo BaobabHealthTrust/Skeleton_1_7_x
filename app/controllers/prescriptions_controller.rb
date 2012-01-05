@@ -217,7 +217,7 @@ class PrescriptionsController < ApplicationController
     # raise params.to_yaml
 
     encounter = Encounter.new(params[:encounter])
-    encounter.encounter_datetime ||= session[:datetime]
+    encounter.encounter_datetime = session[:datetime] rescue DateTime.now()
     encounter.save
 
     (params[:prescriptions] || []).each{|prescription|      
@@ -234,7 +234,7 @@ class PrescriptionsController < ApplicationController
       prescription.delete(:value_text) unless prescription[:value_coded_or_text].blank?
 
       prescription[:encounter_id]  = @encounter.encounter_id
-      prescription[:obs_datetime]  = @encounter.encounter_datetime ||= (session[:datetime] ||=  Time.now())
+      prescription[:obs_datetime]  = @encounter.encounter_datetime || (session[:datetime] ||  Time.now())
       prescription[:person_id]     = @encounter.patient_id
 
       diagnosis_observation = Observation.create("encounter_id" => prescription[:encounter_id],
@@ -277,8 +277,8 @@ class PrescriptionsController < ApplicationController
         return
       end
 
-      start_date = session[:datetime] ||=  Time.now
-      auto_expire_date = (session[:datetime] ||=  Time.now) + prescription[:duration].to_i.days
+      start_date = session[:datetime] ||  Time.now
+      auto_expire_date = (session[:datetime] ||  Time.now) + prescription[:duration].to_i.days
       
       DrugOrder.write_order(@encounter, @patient, @diagnosis, @drug, start_date, 
         auto_expire_date, prescription[:dosage], prescription[:frequency], 0 , nil)

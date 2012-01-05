@@ -95,6 +95,10 @@ module ApplicationHelper
   def prefix
     get_global_property_value("dc.number.prefix") rescue ""
   end
+  
+  def advanced_prescription_interface
+    get_global_property_value("advanced.prescription.interface")  
+  end
 
 	def get_global_property_value(global_property)
 		property_value = Settings[global_property] 
@@ -243,4 +247,10 @@ module ApplicationHelper
 			end
 		end
 	end
+	
+	def qwerty_or_abc_keyboard
+		abc = UserProperty.find_by_property_and_user_id('keyboard',session[:user_id]).property_value == 'abc' rescue false
+		abc ? "abc" : "qwerty"
+	end
+	
 end

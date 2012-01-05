@@ -633,6 +633,8 @@ EOF
     patient.national_id = get_patient_identifier(person.patient, 'National id')    
 	  patient.national_id_with_dashes = get_national_id_with_dashes(person.patient)
     patient.name = person.names.first.given_name + ' ' + person.names.first.family_name rescue nil
+    patient.first_name = person.names.first.given_name rescue nil
+    patient.last_name = person.names.first.family_name rescue nil
     patient.sex = sex(person)
     patient.age = age(person)
     patient.age_in_months = age_in_months(person)
