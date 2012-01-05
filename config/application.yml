@@ -9,6 +9,7 @@ development:
 test: &TEST
  create_from_remote: no
  use.user.selected.activities: yes
+ auto_set_appointment: true
 
 cucumber:
   <<: *TEST

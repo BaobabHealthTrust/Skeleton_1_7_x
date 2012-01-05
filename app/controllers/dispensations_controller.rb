@@ -92,11 +92,15 @@ class DispensationsController < ApplicationController
         complete = dispension_complete(@patient, @encounter, PatientService.current_treatment_encounter(@patient, session_date, user_person_id))
         if complete
           unless params[:location]
-            start_date , end_date = DrugOrder.prescription_dates(@patient,session_date.to_date)
-            redirect_to :controller => 'encounters',:action => 'new',
-              :start_date => start_date,
-              :patient_id => @patient.id,:id =>"show",:encounter_type => "appointment" ,
-              :end_date => end_date
+          	if (CoreService.get_global_property_value('auto_set_appointment') rescue false) 
+		          start_date , end_date = DrugOrder.prescription_dates(@patient,session_date.to_date)
+		          redirect_to :controller => 'encounters',:action => 'new',
+		            :start_date => start_date,
+		            :patient_id => @patient.id,:id =>"show",:encounter_type => "appointment" ,
+		            :end_date => end_date
+		        else
+            	redirect_to "/patients/treatment_dashboard?id=#{@patient.patient_id}&dispensed_order_id=#{@order_id}"	        	
+						end
           else
             render :text => 'complete' and return
           end
