@@ -38,21 +38,27 @@ class PatientIdentifiersController < ApplicationController
       end
 
     else
-      @patient = Patient.find(params[:id])
-      @identifier_type = PatientIdentifierType.find(params[:type])
-      @identifier = @patient.patient_identifiers.find_by_identifier_type(@identifier_type.id)
+		@patient = Patient.find(params[:id])
+		@identifier_type = PatientIdentifierType.find(params[:type])
+		@identifier = @patient.patient_identifiers.find_by_identifier_type(@identifier_type.id)
+		
+		prefix = params[:type]
 
-      if @identifier != nil
-         if @identifier.identifier.split("-").empty? == "true"
-            @identifier_value = @identifier.identifier
-         else
-            @identifier_value = @identifier.identifier.split("-")[1]
-         end
-      else
-         @identifier_value = 0
-      end
-      
-      render :layout => true
+		if params[:type] == '14' 
+			@prefix = DiabetesService.dc_number_prefix
+		end 
+
+		if @identifier != nil
+			if @identifier.identifier.split("-").empty? == "true"
+				@identifier_value = @identifier.identifier
+			else
+				@identifier_value = @identifier.identifier.split("-")[1]
+			end
+		else
+			@identifier_value = 0
+		end
+
+		render :layout => true
     end
   end
   
