@@ -70,9 +70,13 @@ module PatientService
         "names"=>{"family_name"=> names_params["family_name"], 
         "given_name"=> names_params["given_name"]
     }}}}
+    
+    dde_user = CoreService.get_global_property_value('dde.user') rescue nil
+    dde_password = CoreService.get_global_property_value('dde.password') rescue nil
+    dde_server = CoreService.get_global_property_value('dde.server') rescue 'localhost'
+    dde_server_port = CoreService.get_global_property_value('dde.server.port') rescue 80
 
-
-    uri = "http://admin:admin@localhost:3001/people.json/"                          
+    uri = "http://#{dde_user}:#{dde_password}@#{dde_server}:#{dde_server_port}/people.json/"     
     recieved_params = RestClient.post(uri,passed_params)      
                                           
     national_id = JSON.parse(recieved_params)["npid"]["value"]
