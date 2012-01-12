@@ -1,6 +1,91 @@
 module PatientService
 	include CoreService
 	require 'bean'
+	require 'json'
+	#require 'rest_client'
+	
+    def self.create_patient_from_dde(params)
+	  address_params = params["person"]["addresses"]
+		names_params = params["person"]["names"]
+		patient_params = params["person"]["patient"]
+    birthday_params = params["person"]
+		params_to_process = params.reject{|key,value| 
+      key.match(/addresses|patient|names|relation|cell_phone_number|home_phone_number|office_phone_number|agrees_to_be_visited_for_TB_therapy|agrees_phone_text_for_TB_therapy/) 
+    }
+		birthday_params = params_to_process["person"].reject{|key,value| key.match(/gender/) }
+		person_params = params_to_process["person"].reject{|key,value| key.match(/birth_|age_estimate|occupation/) }
+
+
+		if person_params["gender"].to_s == "Female"
+		   person_params["gender"] = 'F'
+		elsif person_params["gender"].to_s == "Male"
+		   person_params["gender"] = 'M'
+		end
+    
+		unless birthday_params.empty?
+		  if birthday_params["birth_year"] == "Unknown"
+			  birthdate = Date.new(Date.today.year - birthday_params["age_estimate"].to_i, 7, 1) 
+        birthdate_estimated = 1
+		  else
+			  year = birthday_params["birth_year"]
+        month = birthday_params["birth_month"]
+        day = birthday_params["birth_day"]
+
+        month_i = (month || 0).to_i                                                 
+        month_i = Date::MONTHNAMES.index(month) if month_i == 0 || month_i.blank?   
+        month_i = Date::ABBR_MONTHNAMES.index(month) if month_i == 0 || month_i.blank?
+                                                                                    
+        if month_i == 0 || month == "Unknown"                                       
+          birthdate = Date.new(year.to_i,7,1)                                
+          birthdate_estimated = 1
+        elsif day.blank? || day == "Unknown" || day == 0                            
+          birthdate = Date.new(year.to_i,month_i,15)                         
+          birthdate_estimated = 1
+        else                                                                        
+          birthdate = Date.new(year.to_i,month_i,day.to_i)                   
+          birthdate_estimated = 0
+        end
+		  end
+    else
+      birthdate_estimated = 0
+		end
+
+    passed_params = {"person"=> 
+      {"data" => 
+        {"addresses"=> 
+        {"state_province"=> address_params["address2"], 
+         "address2"=> address_params["address1"], 
+         "city_village"=> address_params["city_village"],
+         "county_district"=> address_params["county_district"]
+        }, 
+         "attributes"=> 
+        {"occupation"=> params["person"]["occupation"], 
+         "cell_phone_number" => params["person"]["cell_phone_number"] },
+         "patient"=> 
+        {"identifiers"=> 
+        {"diabetes_number"=>""}}, 
+        "gender"=> person_params["gender"], 
+        "birthdate"=> birthdate, 
+        "birthdate_estimated"=> birthdate_estimated , 
+        "names"=>{"family_name"=> names_params["family_name"], 
+        "given_name"=> names_params["given_name"]
+    }}}}
+    
+    dde_user = CoreService.get_global_property_value('dde.user') rescue nil
+    dde_password = CoreService.get_global_property_value('dde.password') rescue nil
+    dde_server = CoreService.get_global_property_value('dde.server') rescue 'localhost'
+    dde_server_port = CoreService.get_global_property_value('dde.server.port') rescue 80
+
+    uri = "http://#{dde_user}:#{dde_password}@#{dde_server}:#{dde_server_port}/people.json/"     
+    recieved_params = RestClient.post(uri,passed_params)      
+                                          
+    national_id = JSON.parse(recieved_params)["npid"]["value"]
+	  person = self.create_from_form(params[:person])
+    identifier_type = PatientIdentifierType.find_by_name("National id") || PatientIdentifierType.find_by_name("Unknown id")
+    person.patient.patient_identifiers.create("identifier" => national_id, 
+      "identifier_type" => identifier_type.patient_identifier_type_id) unless national_id.blank?
+    return person
+  end	
 
   def self.remote_demographics(person_obj)
     demo = demographics(person_obj)
@@ -885,6 +970,14 @@ EOF
     ]) if people.blank?
 
     return people
+  end
+  
+  def self.person_search_from_dde(params)
+    search_string = "given_name=#{params[:given_name]}"
+    search_string += "&family_name=#{params[:family_name]}"
+    search_string += "&gender=#{params[:gender]}"
+    uri = "http://admin:admin@localhost:3001/people/find.json?#{search_string}"                          
+    JSON.parse(RestClient.get(uri)) rescue []
   end
   
   def self.search_by_identifier(identifier)
