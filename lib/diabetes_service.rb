@@ -114,6 +114,7 @@ end
     creatinine = {}
     @creatinine_obs = []
     creatinine_id = Concept.find_by_name('CREATININE').id
+    max_creatinine_date = nil
     @patient.person.observations.find(:all,
       :joins => :encounter,
       :conditions => ['concept_id != (?) AND encounter_type = ? AND concept_id = ?',
@@ -121,6 +122,10 @@ end
       :order => 'obs_datetime DESC').each{|o| 
       @creatinine_obs << "#{o.to_s_formatted} #{("(" + 
       o.obs_datetime.strftime("%d-%b-%Y") + ")") if !creatinine[o.obs_datetime.strftime("%d-%b-%Y")]}; "
+      
+      max_creatinine_date = o.obs_datetime.strftime("%Y-%m-%d") if max_creatinine_date.nil? || 
+       (max_creatinine_date.nil? ? (o.obs_datetime > max_creatinine_date.to_date) : false)
+
       creatinine[o.obs_datetime.strftime("%d-%b-%Y")] = true
     } # rescue []
 
@@ -128,6 +133,7 @@ end
     urine = {}
     @urine_protein_obs = []
     urine_protein_id = Concept.find_by_name('URINE PROTEIN').id
+    max_urine_protein_date = nil
     @patient.person.observations.find(:all,
       :joins => :encounter,
       :conditions => ['concept_id != (?) AND encounter_type = ? AND concept_id = ?',
@@ -135,12 +141,17 @@ end
       :order => 'obs_datetime DESC').each{|o| 
       @urine_protein_obs << "#{o.to_s_formatted} #{("(" + 
       o.obs_datetime.strftime("%d-%b-%Y") + ")") if !urine[o.obs_datetime.strftime("%d-%b-%Y")]}; "
+      
+      max_urine_protein_date = o.obs_datetime.strftime("%Y-%m-%d") if max_urine_protein_date.nil? || 
+       (max_urine_protein_date.nil? ? (o.obs_datetime > max_urine_protein_date.to_date) : false)
+      
       urine[o.obs_datetime.strftime("%d-%b-%Y")] = true
     } # rescue []
 
     # Foot Check
     foot = {}
     @foot_check_obs = []
+    max_foot_check_date = nil
     foot_check_encounters = @patient.encounters.find(:all,
       :joins => :observations,
       :conditions => ['concept_id IN (?)',
@@ -153,12 +164,17 @@ end
       :order => 'obs_datetime DESC').each{|o| 
       @foot_check_obs << "#{o.to_s_formatted} #{("(" + 
       o.obs_datetime.strftime("%d-%b-%Y") + ")") if !foot[o.obs_datetime.strftime("%d-%b-%Y")]}; "
+      
+      max_foot_check_date = o.obs_datetime.strftime("%Y-%m-%d") if max_foot_check_date.nil? || 
+       (max_foot_check_date.nil? ? (o.obs_datetime > max_foot_check_date.to_date) : false)
+      
       foot[o.obs_datetime.strftime("%d-%b-%Y")] = true
     } # rescue []
 
     # Visual Acuity RIGHT EYE FUNDOSCOPY
     visual = {}
     @visual_acuity_obs = []
+    max_visual_acuity_date = nil
     visual_acuity_encounters = @patient.encounters.find(:all,
       :joins => :observations,
       :conditions => ['concept_id IN (?)',
@@ -171,12 +187,17 @@ end
       :order => 'obs_datetime DESC').each{|o| 
       @visual_acuity_obs << "#{o.to_s_formatted} #{("(" + 
       o.obs_datetime.strftime("%d-%b-%Y") + ")") if !visual[o.obs_datetime.strftime("%d-%b-%Y")]}; "
+      
+      max_visual_acuity_date = o.obs_datetime.strftime("%Y-%m-%d") if max_visual_acuity_date.nil? || 
+       (max_visual_acuity_date.nil? ? (o.obs_datetime > max_visual_acuity_date.to_date) : false)
+      
       visual[o.obs_datetime.strftime("%d-%b-%Y")] = true
     } # rescue []
 
     # Fundoscopy
     fundo = {}
     @fundoscopy_obs = []
+    max_fundoscopy_date = nil
     fundoscopy_encounters = @patient.encounters.find(:all,
       :joins => :observations,
       :conditions => ['concept_id IN (?)',
@@ -189,12 +210,17 @@ end
       :order => 'obs_datetime DESC').each{|o| 
       @fundoscopy_obs << "#{o.to_s_formatted} #{("(" + 
       o.obs_datetime.strftime("%d-%b-%Y") + ")") if !fundo[o.obs_datetime.strftime("%d-%b-%Y")]}; "
+      
+      max_fundoscopy_date = o.obs_datetime.strftime("%Y-%m-%d") if max_fundoscopy_date.nil? || 
+       (max_fundoscopy_date.nil? ? (o.obs_datetime > max_fundoscopy_date.to_date) : false)
+      
       fundo[o.obs_datetime.strftime("%d-%b-%Y")] = true
     } # rescue []
 
     # Urea
     urea = {}
     @urea_obs = []
+    max_urea_date = nil
     urea_id = Concept.find_by_name('UREA').id
     @patient.person.observations.find(:all,
       :joins => :encounter,
@@ -203,16 +229,49 @@ end
       :order => 'obs_datetime DESC').each{|o| 
       @urea_obs << "#{o.to_s_formatted} #{("(" + 
       o.obs_datetime.strftime("%d-%b-%Y") + ")") if !urea[o.obs_datetime.strftime("%d-%b-%Y")]}; "
+      
+      max_urea_date = o.obs_datetime.strftime("%Y-%m-%d") if max_urea_date.nil? || 
+       (max_urea_date.nil? ? (o.obs_datetime > max_urea_date.to_date) : false)
+       
       urea[o.obs_datetime.strftime("%d-%b-%Y")] = true
     } # rescue []
     
-    recent_screen_complications = {}
+    # Macrovascular
+    macrovascular = {}
+    @macrovascular = []
+    max_macrovascular_date = nil
+    macrovascular_id = Concept.find_by_name('MACROVASCULAR').id
+    @patient.person.observations.find(:all,
+      :joins => :encounter,
+      :conditions => ['encounter_type = ? AND concept_id = ?',
+        diabetes_test_id, macrovascular_id],
+      :order => 'obs_datetime DESC').each{|o| 
+      @macrovascular << "#{o.to_s_formatted.gsub(/Left/, "L.").gsub(/Visual\sAcuity/, "V.A.").gsub(/Right/, "R.").gsub(/Pulses\sPresent/, "Pulses Yes")} #{("(" + 
+      o.obs_datetime.strftime("%d-%b-%Y") + ")") if !macrovascular[o.obs_datetime.strftime("%d-%b-%Y")]}; "
+      
+      max_macrovascular_date = o.obs_datetime.strftime("%Y-%m-%d") if max_macrovascular_date.nil? || 
+       (max_macrovascular_date.nil? ? (o.obs_datetime > max_macrovascular_date.to_date) : false)
+      
+      macrovascular[o.obs_datetime.strftime("%d-%b-%Y")] = true
+    } # rescue []
+    
+    recent_screen_complications = {
+      "max_creatinine_date" => max_creatinine_date,
+      "max_urea_date" => max_urea_date,
+      "max_urine_protein_date" => max_urine_protein_date,
+      "max_foot_check_date" => max_foot_check_date,
+      "max_visual_acuity_date" => max_visual_acuity_date,
+      "max_fundoscopy_date" => max_fundoscopy_date,
+      "max_macrovascular_date" => max_macrovascular_date
+      }
+      
     recent_screen_complications["creatinine"] = @creatinine_obs.reverse if @creatinine_obs != []
     recent_screen_complications["urine_protein"] = @urine_protein_obs.reverse if @urine_protein_obs != []
     recent_screen_complications["foot_check"] = @foot_check_obs.reverse if @foot_check_obs != []
     recent_screen_complications["visual_acuity"] = @visual_acuity_obs.reverse if @visual_acuity_obs != []
     recent_screen_complications["fundoscopy"] = @fundoscopy_obs.reverse if @fundoscopy_obs != []
-    recent_screen_complications["urea"] = @urea_obs.reverse if @urea_obs != []    
+    recent_screen_complications["urea"] = @urea_obs.reverse if @urea_obs != []
+    recent_screen_complications["macrovascular"] = @macrovascular.reverse if @macrovascular != []  
 
     recent_screen_complications
   end
@@ -292,18 +351,6 @@ end
     ds_number = PatientIdentifier.find(:first,:conditions => test_condtion).identifier rescue "Unknown"
 
     return ds_number
-  end
-  
-  def self.current_orders(patient)
-    encounter = current_treatment_encounter(patient)
-    orders = encounter.orders.active
-    orders
-  end
-  
-  def self.current_treatment_encounter(patient)
-    type = EncounterType.find_by_name("TREATMENT")
-    encounter = patient.encounters.current.find_by_encounter_type(type.id)
-    encounter ||= patient.encounters.create(:encounter_type => type.id)
   end
   
   def self.drug_details(drug_info, diagnosis_name)
@@ -394,4 +441,8 @@ end
       :group => "concept.concept_id, drug.name, drug.dose_strength")
   end
 
+  def self.dc_number_prefix
+    site_prefix = CoreService.get_global_property_value('dc.number.prefix')
+    return site_prefix
+  end
 end
