@@ -4,9 +4,10 @@ class PatientsController < ApplicationController
   def show
     session[:mastercard_ids] = []
     session_date = session[:datetime].to_date rescue Date.today
-	@patient_bean = PatientService.get_patient(@patient.person)
-	@encounters = @patient.encounters.find_by_date(session_date)
-	@diabetes_number = DiabetesService.diabetes_number(@patient)
+
+		@patient_bean = PatientService.get_patient(@patient.person)
+		@encounters = @patient.encounters.find_by_date(session_date)
+		@diabetes_number = DiabetesService.diabetes_number(@patient)
     @prescriptions = @patient.orders.unfinished.prescriptions.all
     @programs = @patient.patient_programs.all
     @alerts = alerts(@patient, session_date) rescue nil
@@ -745,8 +746,8 @@ class PatientsController < ApplicationController
                :joins => "INNER JOIN encounter ON obs.encounter_id = encounter.encounter_id",
                :conditions => ["concept_id = ? AND encounter_type = ? AND patient_id = ?",
                ConceptName.find_by_name('Appointment date').concept_id,
-               type.id,patient.id]).to_s rescue nil
-    alerts << ('Next ' + next_appt).capitalize unless next_appt.blank?
+               type.id,patient.id]).value_datetime.strftime("%a %d %B %Y") rescue nil
+    alerts << ('Next appointment: ' + next_appt) unless next_appt.blank?
 
     encounter_dates = Encounter.find_by_sql("SELECT * FROM encounter WHERE patient_id = #{patient.id} AND encounter_type IN (" +
         ("SELECT encounter_type_id FROM encounter_type WHERE name IN ('VITALS', 'TREATMENT', " +
