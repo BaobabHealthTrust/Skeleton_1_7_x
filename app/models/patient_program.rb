@@ -39,7 +39,11 @@ class PatientProgram < ActiveRecord::Base
   end
 
   def to_s
-    "#{self.program.concept.concept_names.typed("SHORT").first.name rescue program.concept.concept_names.first.name} (at #{location.name rescue nil})"
+	if !self.program.concept.shortname.blank?
+    	"#{self.program.concept.shortname} (at #{location.name rescue nil})"
+	else
+    	"#{self.program.concept.fullname} (at #{location.name rescue nil})"
+	end
   end
   
   def transition(params)

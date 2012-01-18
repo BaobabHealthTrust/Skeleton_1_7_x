@@ -27,7 +27,7 @@ class Concept < ActiveRecord::Base
   end
 
   def shortname
-	name = self.concept_names.typed('SHORT').first.name
+	name = self.concept_names.typed('SHORT').first.name rescue nil
 	return name unless name.blank?
     return self.concept_names.first.name rescue nil
   end
