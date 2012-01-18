@@ -91,24 +91,24 @@ class LocationController < ApplicationController
 
     def print
       location_name = params[:location_name][:clinic_name].to_s
-      location = get_location_label(Location.find_by_name(location_name))#.location_label
       print_location_and_redirect("/location/location_label?location_name=#{location_name}", "/clinic")
     end
 
-  def get_location_label(location_name)
-    return unless location_name.location_id
+  def get_location_label(location)
+    return unless location.location_id
     label = ZebraPrinter::StandardLabel.new
     label.font_size = 2
     label.font_horizontal_multiplier = 2
     label.font_vertical_multiplier = 2
     label.left_margin = 50
-    label.draw_barcode(50,180,0,1,5,15,120,false,"#{location_name.location_id}")
-    label.draw_multi_text("#{location_name.name}")
+    label.draw_barcode(50,180,0,1,5,15,120,false,"#{location.location_id}")
+    label.draw_multi_text("#{location.name}")
     label.print(1)
   end
     
-  def location_label
-      print_string = Location.find_by_name(params[:location_name]).location_label
-      send_data(print_string,:type=>"application/label; charset=utf-8", :stream=> false, :filename=>"#{params[:id]}#{rand(10000)}.lbl", :disposition => "inline")
+	def location_label
+		location_name = params[:location_name]
+		print_string = get_location_label(Location.find_by_name(location_name))
+		send_data(print_string,:type=>"application/label; charset=utf-8", :stream=> false, :filename=>"#{params[:id]}#{rand(10000)}.lbl", :disposition => "inline")
     end
 end
