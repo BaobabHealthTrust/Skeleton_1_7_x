@@ -173,16 +173,21 @@ module PatientService
   
   def self.current_treatment_encounter(patient, date = Time.now(), provider = user_person_id)
     type = EncounterType.find_by_name("TREATMENT")
-    encounter = patient.encounters.find(:first,:conditions =>["DATE(encounter_datetime) = ? AND encounter_type = ?",date.to_date,type.id])
+    encounter = patient.encounters.find(:first,:conditions =>["encounter_datetime BETWEEN ? AND ? AND encounter_type = ?",
+    									date.to_date.strftime('%Y-%m-%d 00:00:00'),
+    									date.to_date.strftime('%Y-%m-%d 23:59:59'),
+    									type.id])
     encounter ||= patient.encounters.create(:encounter_type => type.id,:encounter_datetime => date, :provider_id => provider)
-
   end
 
   def self.count_by_type_for_date(date)
     # This query can be very time consuming, because of this we will not consider
     # that some of the encounters on the specific date may have been voided
     ActiveRecord::Base.connection.select_all("SELECT count(*) as number, encounter_type FROM encounter GROUP BY encounter_type")
-    todays_encounters = Encounter.find(:all, :include => "type", :conditions => ["DATE(encounter_datetime) = ?",date])
+    todays_encounters = Encounter.find(:all, :include => "type", :conditions => ["encounter_datetime BETWEEN TIMESTAMP (?) AND TIMESTAMP (?)",
+		date.to_date.strftime('%Y-%m-%d 00:00:00'),
+		date.to_date.strftime('%Y-%m-%d 23:59:59')
+    ])
     encounters_by_type = Hash.new(0)
     todays_encounters.each{|encounter|
       next if encounter.type.nil?
@@ -374,17 +379,17 @@ module PatientService
   
   def self.checks_if_labs_results_are_avalable_to_be_shown(patient , session_date , task)
     lab_result = Encounter.find(:first,:order => "encounter_datetime DESC",
-      :conditions =>["DATE(encounter_datetime) <= ? 
-                                AND patient_id = ? AND encounter_type = ?",
-        session_date.to_date ,patient.id,
+      :conditions =>[" encounter_datetime <= TIMESTAMP(?) AND patient_id = ? AND encounter_type = ?",
+        session_date.to_date.strftime('%Y-%m-%d 23:59:59'),
+        patient.id,
         EncounterType.find_by_name('LAB RESULTS').id])
-
+	
     give_lab_results = Encounter.find(:first,:order => "encounter_datetime DESC",
-      :conditions =>["DATE(encounter_datetime) >= ? 
+      :conditions =>["encounter_datetime >= TIMESTAMP(?)
                                 AND patient_id = ? AND encounter_type = ?",
-        lab_result.encounter_datetime.to_date , patient.id,
+        lab_result.encounter_datetime.to_date.strftime('%Y-%m-%d 00:00:00') , patient.id,
         EncounterType.find_by_name('GIVE LAB RESULTS').id]) rescue nil
-
+	
     if not lab_result.blank? and give_lab_results.blank?
       task.encounter_type = 'GIVE LAB RESULTS'
       task.url = "/encounters/new/give_lab_results?patient_id=#{patient.id}"
@@ -532,13 +537,17 @@ module PatientService
 
     appointment_date_concept_id = Concept.find_by_name("APPOINTMENT DATE").concept_id rescue nil
 
-    appointments = Observation.find(:all,
-      :conditions => ["DATE(obs.value_datetime) >= ? AND DATE(obs.value_datetime) <= ? AND " +
-          "obs.concept_id = ? AND obs.voided = 0 AND obs.person_id = ?", start_date.to_date,
-        end_date.to_date, appointment_date_concept_id, patient.id])
+     appointments = Observation.find(:all,
+      :conditions => ["obs.value_datetime BETWEEN TIMESTAMP(?) AND TIMESTAMP(?) AND " +
+          "obs.concept_id = ? AND obs.voided = 0 AND obs.person_id = ?", 
+			start_date.to_date.strftime('%Y-%m-%d 00:00:00'),
+			end_date.to_date.strftime('%Y-%m-%d 23:59:59'),
+			appointment_date_concept_id, patient.id])
 
     appointments
   end
+  
+
 
   def self.get_patient_identifier(patient, identifier_type)
     patient_identifier_type_id = PatientIdentifierType.find_by_name(identifier_type).patient_identifier_type_id rescue nil
@@ -698,8 +707,11 @@ EOF
     refer_concept = ConceptName.find_by_name('PRESCRIBE ARVS THIS VISIT').concept_id
     refer_patient = Encounter.find(:first,
       :joins => 'INNER JOIN obs USING (encounter_id)',
-      :conditions => ["encounter_type = ? AND concept_id = ? AND person_id = ? AND value_coded = ? AND DATE(obs_datetime) = ?",
-        encounter_type.id,refer_concept,patient.id,yes_concept,date.to_date],
+      :conditions => ["encounter_type = ? AND concept_id = ? AND person_id = ? AND value_coded = ? AND obs_datetime BETWEEN ? AND ?",
+        encounter_type.id,refer_concept,patient.id,yes_concept,
+		date.to_date.strftime('%Y-%m-%d 00:00:00'),
+		date.to_date.strftime('%Y-%m-%d 23:59:59')
+        ],
       :order => 'encounter_datetime DESC,date_created DESC')
     return false if refer_patient.blank?
     return true
@@ -709,10 +721,11 @@ EOF
     encounter_type = EncounterType.find_by_name('TREATMENT')
     Encounter.find(:first,
       :joins => 'INNER JOIN orders ON orders.encounter_id = encounter.encounter_id
-               INNER JOIN drug_order ON orders.order_id = orders.order_id',
+               INNER JOIN drug_order ON drug_order.order_id = orders.order_id',
       :conditions => ["quantity IS NOT NULL AND encounter_type = ? AND
-               encounter.patient_id = ? AND DATE(encounter_datetime) < ?",
-        encounter_type.id,patient.id,date.to_date],
+               encounter.patient_id = ? AND encounter_datetime < TIMESTAMP(?)",
+        encounter_type.id,patient.id,
+        date.to_date.strftime('%Y-%m-%d 00:00:00')],
       :order => 'encounter_datetime DESC,date_created DESC').orders rescue []
   end
 
@@ -988,7 +1001,7 @@ EOF
     people = PatientIdentifier.find_all_by_identifier(identifier).map{|id| 
       id.patient.person
     } unless identifier.blank? rescue nil
-    #return people unless people.blank?
+    return people unless people.blank?
     create_from_dde_server = CoreService.get_global_property_value('create.from.dde.server').to_s == "true" rescue false
     if create_from_dde_server 
       dde_server = GlobalProperty.find_by_property("dde_server_ip").property_value rescue ""
@@ -1142,14 +1155,17 @@ EOF
 
     if first_vitals.blank?
       encounter = Encounter.find(:first,:order => "encounter_datetime DESC",
-        :conditions =>["patient_id = ? AND encounter_type = ?",
-          patient.id,EncounterType.find_by_name('LAB ORDERS').id])
+        :conditions =>["patient_id = ? AND encounter_type = ?",patient.id,
+        EncounterType.find_by_name('LAB ORDERS').id])
       
       sup_result = self.next_lab_encounter(patient , encounter, session_date)
 
       reception = Encounter.find(:first,:order => "encounter_datetime DESC",
-        :conditions =>["DATE(encounter_datetime) = ? AND patient_id = ? AND encounter_type = ?",
-          session_date.to_date,patient.id,EncounterType.find_by_name('TB RECEPTION').id])
+        :conditions =>["encounter_datetime BETWEEN ? AND ? AND patient_id = ? AND encounter_type = ?",
+          session_date.to_date.strftime('%Y-%m-%d 00:00:00'),
+          session_date.to_date.strftime('%Y-%m-%d 23:59:59'),
+          patient.id,
+          EncounterType.find_by_name('TB RECEPTION').id])
 
       if reception.blank? and not sup_result.blank?
         if user_selected_activities.match(/Manage TB Reception Visits/i)
@@ -1177,8 +1193,11 @@ EOF
     return if self.patient_tb_status(patient).match(/treatment/i) and not self.patient_hiv_status(patient).match(/Positive/i)
 
     vitals = Encounter.find(:first,:order => "encounter_datetime DESC",
-      :conditions =>["DATE(encounter_datetime) = ? AND patient_id = ? AND encounter_type = ?",
-        session_date.to_date,patient.id,EncounterType.find_by_name('VITALS').id])
+      :conditions =>["encounter_datetime BETWEEN ? AND ? AND patient_id = ? AND encounter_type = ?",
+		session_date.to_date.strftime('%Y-%m-%d 00:00:00'),
+		session_date.to_date.strftime('%Y-%m-%d 23:59:59'),
+        patient.id,
+        EncounterType.find_by_name('VITALS').id])
 
     if vitals.blank? and user_selected_activities.match(/Manage Vitals/i) 
       task.encounter_type = 'VITALS'
