@@ -7,6 +7,7 @@ class ConceptName < ActiveRecord::Base
   belongs_to :concept, :conditions => {:retired => 0}
   named_scope :tagged, lambda{|tags| tags.blank? ? {} : {:include => :tags, :conditions => ['concept_name_tag.tag IN (?)', Array(tags)]}}
   named_scope :typed, lambda{|tags| tags.blank? ? {} : {:conditions => ['concept_name_type IN (?)', Array(tags)]}}
+  self.default_scope :joins => :concept, :conditions => "concept_name.voided = 0 AND concept.retired = 0 AND concept_name.name != ''"
 
 	#TODO Need 
   # This method gets the collection of all short forms of frequencies as used into make this method a lot more generic
