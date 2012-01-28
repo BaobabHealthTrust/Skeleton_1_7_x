@@ -95,10 +95,6 @@ module ApplicationHelper
   def prefix
     get_global_property_value("dc.number.prefix") rescue ""
   end
-  
-  def advanced_prescription_interface
-    get_global_property_value("advanced.prescription.interface")  
-  end
 
 	def get_global_property_value(global_property)
 		property_value = Settings[global_property] 
@@ -177,8 +173,7 @@ module ApplicationHelper
   end
   
   def concept_set_options(concept_name)
-    concept_id = ConceptName.find(:first,:joins =>"INNER JOIN concept USING (concept_id)",
-                                  :conditions =>["voided = 0 AND concept.retired = 0 AND name = ?",concept_name]).concept_id
+    concept_id = concept_id = ConceptName.find_by_name(concept_name).concept_id
     set = ConceptSet.find_all_by_concept_set(concept_id, :order => 'sort_weight')
     options = set.map{|item|next if item.concept.blank? ; [item.concept.fullname, item.concept.fullname] }
     options_for_select(options)
@@ -186,13 +181,13 @@ module ApplicationHelper
 
 
   def selected_concept_set_options(concept_name, exclude_concept_name)
-    concept_id = ConceptName.find(:first,:joins =>"INNER JOIN concept USING (concept_id)",
-                                  :conditions =>["voided = 0 AND concept.retired = 0 AND name = ?",concept_name]).concept_id
+    concept_id = concept_id = ConceptName.find_by_name(concept_name).concept_id
+    
     set = ConceptSet.find_all_by_concept_set(concept_id, :order => 'sort_weight')
     options = set.map{|item|next if item.concept.blank? ; [item.concept.fullname, item.concept.fullname] }
 
-    exclude_concept_id = ConceptName.find(:first,:joins =>"INNER JOIN concept USING (concept_id)",
-                                  :conditions =>["voided = 0 AND concept.retired = 0 AND name = ?", exclude_concept_name]).concept_id
+    exclude_concept_id = ConceptName.find_by_name(exclude_concept_name).concept_id
+    
     exclude_set = ConceptSet.find_all_by_concept_set(exclude_concept_id, :order => 'sort_weight')
     exclude_options = exclude_set.map{|item|next if item.concept.blank? ; [item.concept.fullname, item.concept.fullname] }
 
@@ -200,8 +195,8 @@ module ApplicationHelper
   end
   
   def concept_set(concept_name)
-    concept_id = ConceptName.find(:first,:joins =>"INNER JOIN concept USING (concept_id)",
-                                  :conditions =>["voided = 0 AND concept.retired = 0 AND name = ?",concept_name]).concept_id
+    concept_id = ConceptName.find_by_name(concept_name).concept_id
+    
     set = ConceptSet.find_all_by_concept_set(concept_id, :order => 'sort_weight')
     options = set.map{|item|next if item.concept.blank? ; [item.concept.fullname] }
     return options
@@ -225,8 +220,8 @@ module ApplicationHelper
   end
   
   def concept_sets(concept_name)
-    concept_id = ConceptName.find(:first,:joins =>"INNER JOIN concept USING (concept_id)",
-                                  :conditions =>["retired = 0 AND name = ?",concept_name]).concept_id
+	concept_id = ConceptName.find_by_name(concept_name).concept_id
+
     set = ConceptSet.find_all_by_concept_set(concept_id, :order => 'sort_weight')
     set.map{|item|next if item.concept.blank? ; item.concept.fullname }
   end
@@ -247,10 +242,20 @@ module ApplicationHelper
 			end
 		end
 	end
-	
+
+  def preferred_user_keyboard
+    UserProperty.find(:first,
+      :conditions =>["property = ? AND user_id = ?",'preferred.keyboard', 
+      User.current_user.id]).property_value rescue 'abc'
+  end
+  
+	def advanced_prescription_interface
+		get_global_property_value("advanced.prescription.interface")  
+	end
+
 	def qwerty_or_abc_keyboard
 		abc = UserProperty.find_by_property_and_user_id('keyboard',session[:user_id]).property_value == 'abc' rescue false
 		abc ? "abc" : "qwerty"
 	end
-	
+
 end
