@@ -95,6 +95,21 @@ class PeopleController < ApplicationController
 
 	end
   
+  def search_from_dde
+		found_person = PatientService.person_search_from_dde(params)
+    if found_person
+      if params[:relation]
+        redirect_to search_complete_url(found_person.id, params[:relation]) and return
+      else
+        redirect_to :action => 'confirm', 
+          :found_person_id => found_person.id, 
+          :relation => params[:relation] and return
+      end
+    else
+      redirect_to :action => 'search' and return 
+    end
+  end
+   
 	def confirm
 		session_date = session[:datetime] || Date.today
 		if request.post?
@@ -172,18 +187,29 @@ class PeopleController < ApplicationController
 
 	# This method is just to allow the select box to submit, we could probably do this better
 	def select
-		if params[:person] != '0' && Person.find(params[:person]).dead == 1
+    
+    if params[:person][:id] != '0' && Person.find(params[:person][:id]).dead == 1
+      
 			redirect_to :controller => :patients, :action => :show, :id => params[:person]
 		else
-			redirect_to search_complete_url(params[:person], params[:relation]) and return unless params[:person].blank? || params[:person] == '0'
+			redirect_to search_complete_url(params[:person][:id], params[:relation]) and return unless params[:person][:id].blank? || params[:person][:id] == '0'
 
 			redirect_to :action => :new, :gender => params[:gender], :given_name => params[:given_name], :family_name => params[:family_name], :family_name2 => params[:family_name2], :address2 => params[:address2], :identifier => params[:identifier], :relation => params[:relation]
 		end
 	end
  
   def create
-=begin
-    person = PatientService.create_patient_from_dde(params)
+   
+    tb_session = false
+    if User.current_user.activities.include?('Manage Lab Orders') or User.current_user.activities.include?('Manage Lab Results') or
+     User.current_user.activities.include?('Manage Sputum Submissions') or User.current_user.activities.include?('Manage TB Clinic Visits') or
+      User.current_user.activities.include?('Manage TB Reception Visits') or User.current_user.activities.include?('Manage TB Registration Visits') or
+       User.current_user.activities.include?('Manage HIV Status Visits')
+      tb_session = true
+    end
+    
+    person = PatientService.create_patient_from_dde(params) if create_from_dde_server
+
     unless person.blank?
       if use_filing_number and not tb_session
         PatientService.set_patient_filing_number(person.patient) 
@@ -199,7 +225,6 @@ class PeopleController < ApplicationController
       end
       return
     end
-=end    
 
     success = false
     Person.session_datetime = session[:datetime].to_date rescue Date.today
@@ -226,13 +251,6 @@ class PeopleController < ApplicationController
         redirect_to search_complete_url(person.id, params[:relation]) and return
       else
 
-       tb_session = false
-       if User.current_user.activities.include?('Manage Lab Orders') or User.current_user.activities.include?('Manage Lab Results') or
-        User.current_user.activities.include?('Manage Sputum Submissions') or User.current_user.activities.include?('Manage TB Clinic Visits') or
-         User.current_user.activities.include?('Manage TB Reception Visits') or User.current_user.activities.include?('Manage TB Registration Visits') or
-          User.current_user.activities.include?('Manage HIV Status Visits')
-         tb_session = true
-       end
 
         if use_filing_number and not tb_session
           PatientService.set_patient_filing_number(person.patient) 
@@ -283,7 +301,7 @@ class PeopleController < ApplicationController
   def find_by_arv_number
     if request.post?
       redirect_to :action => 'search' ,
-        :identifier => "#{PatientIdentifier.site_prefix} #{params[:arv_number]}" and return
+        :identifier => "#{site_prefix}-ARV-#{params[:arv_number]}" and return
     end
   end
   
@@ -296,7 +314,7 @@ class PeopleController < ApplicationController
     traditional_authorities = traditional_authorities.map do |t_a|
       "<li value='#{t_a.name}'>#{t_a.name}</li>"
     end
-    render :text => traditional_authorities.join('') and return
+    render :text => traditional_authorities.join('') + "<li value='Other'>Other</li>" and return
   end
 
     # Regions containing the string given in params[:value]
@@ -319,7 +337,7 @@ class PeopleController < ApplicationController
     districts = districts.map do |d|
       "<li value='#{d.name}'>#{d.name}</li>"
     end
-    render :text => districts.join('') and return
+    render :text => districts.join('') + "<li value='Other'>Other</li>" and return
   end
 
   def tb_initialization_district
@@ -327,7 +345,7 @@ class PeopleController < ApplicationController
     districts = districts.map do |d|
       "<li value='#{d.name}'>#{d.name}</li>"
     end
-    render :text => districts.join('') and return
+    render :text => districts.join('') + "<li value='Other'>Other</li>" and return
   end
 
     # Villages containing the string given in params[:value]
@@ -339,7 +357,7 @@ class PeopleController < ApplicationController
     villages = villages.map do |v|
       "<li value='#{v.name}'>#{v.name}</li>"
     end
-    render :text => villages.join('') and return
+    render :text => villages.join('') + "<li value='Other'>Other</li>" and return
   end
   
   # Landmark containing the string given in params[:value]
@@ -348,7 +366,7 @@ class PeopleController < ApplicationController
     landmarks = landmarks.map do |v|
       "<li value='#{v.address1}'>#{v.address1}</li>"
     end
-    render :text => landmarks.join('') and return
+    render :text => landmarks.join('') + "<li value='Other'>Other</li>" and return
   end
 
 =begin
@@ -510,6 +528,24 @@ class PeopleController < ApplicationController
       @field = params[:field]
       @field_value = @person.send(@field)
     end
+  end
+  
+  def dde_search
+    # result = '[{"person":{"created_at":"2012-01-06T10:08:37Z","data":{"addresses":{"state_province":"Balaka","address2":"Hospital","city_village":"New Lines Houses","county_district":"Kalembo"},"birthdate":"1989-11-02","attributes":{"occupation":"Police","cell_phone_number":"0999925666"},"birthdate_estimated":"0","patient":{"identifiers":{"diabetes_number":""}},"gender":"M","names":{"family_name":"Banda","given_name":"Laz"}},"birthdate":"1989-11-02","creator_site_id":"1","birthdate_estimated":false,"updated_at":"2012-01-06T10:08:37Z","creator_id":"1","gender":"M","id":1,"family_name":"Banda","given_name":"Laz","remote_version_number":null,"version_number":"0","national_id":null}}]'
+    
+    @dde_server = GlobalProperty.find_by_property("dde_server_ip").property_value rescue ""
+    
+    @dde_server_username = GlobalProperty.find_by_property("dde_server_username").property_value rescue ""
+    
+    @dde_server_password = GlobalProperty.find_by_property("dde_server_password").property_value rescue ""
+    
+    url = "http://#{@dde_server_username}:#{@dde_server_password}@#{@dde_server}" + 
+      "/people/find.json?given_name=#{params[:given_name]}" + 
+      "&family_name=#{params[:family_name]}&gender=#{params[:gender]}"
+    
+    result = RestClient.get(url)
+    
+    render :text => result, :layout => false
   end
   
 private
