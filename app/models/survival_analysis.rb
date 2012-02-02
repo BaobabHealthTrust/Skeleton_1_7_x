@@ -1,6 +1,3 @@
-
-
-
 class SurvivalAnalysis
 
   def self.report(cohort)

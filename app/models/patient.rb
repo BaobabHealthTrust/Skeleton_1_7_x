@@ -12,7 +12,10 @@ class Patient < ActiveRecord::Base
   has_many :encounters, :conditions => {:voided => 0} do 
     def find_by_date(encounter_date)
       encounter_date = Date.today unless encounter_date
-      find(:all, :conditions => ["DATE(encounter_datetime) = DATE(?)", encounter_date]) # Use the SQL DATE function to compare just the date part
+      find(:all, :conditions => ["encounter_datetime BETWEEN ? AND ?", 
+           encounter_date.to_date.strftime('%Y-%m-%d 00:00:00'), 
+           encounter_date.to_date.strftime('%Y-%m-%d 23:59:59')
+      ]) # Use the SQL DATE function to compare just the date part
     end
   end
 

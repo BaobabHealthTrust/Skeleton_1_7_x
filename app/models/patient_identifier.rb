@@ -68,7 +68,8 @@ class PatientIdentifier < ActiveRecord::Base
                                   :conditions => ['identifier_type = ?',
                                   PatientIdentifierType.find_by_name(type).id]).map{ | i | i.identifier }
     
-    filing_number_prefix = GlobalProperty.find_by_property("filing.number.prefix").property_value rescue "FN101,FN102" 
+    filing_number_prefix = CoreService.get_global_property_value("filing.number.prefix") rescue "FN101,FN102" 
+
     prefix = filing_number_prefix.split(",")[0][0..3] if type.match(/filing/i)
     prefix = filing_number_prefix.split(",")[1][0..3] if type.match(/Archived/i)
 

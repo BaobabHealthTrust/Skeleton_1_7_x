@@ -43,19 +43,28 @@ class Cohort
     end
 
     PatientState.find_by_sql("SELECT * FROM (
-                              SELECT s.patient_program_id, patient_id,patient_state_id,start_date,n.name name,state
-                              FROM patient_state s
-                              INNER JOIN patient_program p ON p.patient_program_id = s.patient_program_id
-                              INNER JOIN program_workflow_state w ON w.program_workflow_id = p.program_id AND w.program_workflow_state_id = s.state
-                              INNER JOIN concept_name n ON w.concept_id = n.concept_id
-                              INNER JOIN person ON person.person_id = p.patient_id
-                              WHERE p.voided = 0 AND s.voided = 0 #{conditions}
-                              AND (patient_start_date(patient_id) >= '#{start_date}' AND patient_start_date(patient_id) <= '#{end_date}')
-                              AND p.program_id = #{program_id} AND s.start_date <= '#{outcome_end_date}'
-                              ORDER BY 
-                              patient_id DESC, patient_state_id DESC , start_date DESC) K
-                              GROUP BY K.patient_program_id
-                              ORDER BY K.patient_state_id DESC , K.start_date DESC").map{| state | states << [state.patient_id , state.name] }
+        SELECT s.patient_program_id, patient_id,patient_state_id,start_date,
+               n.name name,state
+        FROM patient_state s
+        INNER JOIN patient_program p ON p.patient_program_id =
+                                        s.patient_program_id
+        INNER JOIN program_workflow pw ON pw.program_id = p.program_id
+        INNER JOIN program_workflow_state w ON w.program_workflow_id =
+                                               pw.program_workflow_id
+                   AND w.program_workflow_state_id = s.state
+        INNER JOIN concept_name n ON w.concept_id = n.concept_id
+        INNER JOIN person ON person.person_id = p.patient_id
+        WHERE p.voided = 0 AND s.voided = 0 #{conditions}
+        AND (patient_start_date(patient_id) >= '#{start_date}'
+        AND patient_start_date(patient_id) <= '#{end_date}')
+        AND p.program_id = #{program_id}
+        AND s.start_date <= '#{outcome_end_date}'
+        ORDER BY patient_id DESC, patient_state_id DESC, start_date DESC
+      ) K
+      GROUP BY patient_id
+      ORDER BY K.patient_state_id DESC , K.start_date DESC").map do |state|
+        states << [state.patient_id , state.name]
+      end
   end
 
   def total_registered(start_date = @start_date, end_date = @end_date)
@@ -229,9 +238,12 @@ class Cohort
     cohort_report['Kaposis Sarcoma'] = self.kaposis_sarcoma
     cohort_report['Total Kaposis Sarcoma'] = self.kaposis_sarcoma(@@first_registration_date,@end_date)
 
+    cohort_report['No TB'] = (cohort_report['Newly total registrated'] - (cohort_report['Current episode of TB'] + cohort_report['TB within the last 2 years']))
+    cohort_report['Total No TB'] = (cohort_report['Total registrated'] - (cohort_report['Total Current episode of TB'] + cohort_report['Total TB within the last 2 years']))
+=begin
     cohort_report['No TB'] = (cohort_report['Newly total registrated'] - (cohort_report['Kaposis Sarcoma'] + cohort_report['Current episode of TB'] + cohort_report['TB within the last 2 years']))
     cohort_report['Total No TB'] = (cohort_report['Total registrated'] - (cohort_report['Total Kaposis Sarcoma'] + cohort_report['Total Current episode of TB'] + cohort_report['Total TB within the last 2 years']))
-
+=end
     cohort_report['Total alive and on ART'] = self.total_alive_and_on_art
     cohort_report['Died total'] = self.total_number_of_dead_patients
 
@@ -376,16 +388,27 @@ class Cohort
   def total_outcomes(outcome_name = 'PATIENT DIED')
     start_date_death_date = []
     PatientState.find_by_sql("SELECT * FROM (
-                              SELECT s.patient_program_id, patient_id,patient_state_id,start_date,n.name name,state,p.date_enrolled date_enrolled
-                              FROM patient_state s
-                              INNER JOIN patient_program p ON p.patient_program_id = s.patient_program_id
-                              INNER JOIN program_workflow_state w ON w.program_workflow_id = p.program_id AND w.program_workflow_state_id = s.state
-                              INNER JOIN concept_name n ON w.concept_id = n.concept_id
-                              WHERE p.voided = 0 AND s.voided = 0 
-                              AND (patient_start_date(patient_id) >= '#{@@first_registration_date}' AND patient_start_date(patient_id) <= '#{@end_date}')
-                              AND p.program_id = #{@@program_id} ORDER BY patient_state_id DESC , start_date DESC) K
-                              GROUP BY K.patient_program_id HAVING (name = '#{outcome_name}')
-                              ORDER BY K.patient_state_id , K.start_date").map{| state | start_date_death_date << [state.date_enrolled , state.start_date] }
+        SELECT s.patient_program_id, patient_id,patient_state_id,start_date,
+               n.name name,state,p.date_enrolled date_enrolled
+        FROM patient_state s
+        INNER JOIN patient_program p ON p.patient_program_id =
+                                        s.patient_program_id
+        INNER JOIN program_workflow pw ON pw.program_id = p.program_id
+        INNER JOIN program_workflow_state w ON w.program_workflow_id =
+                                               pw.program_workflow_id
+                   AND w.program_workflow_state_id = s.state
+        INNER JOIN concept_name n ON w.concept_id = n.concept_id
+        WHERE p.voided = 0 AND s.voided = 0
+        AND (patient_start_date(patient_id) >= '#{@@first_registration_date}'
+        AND patient_start_date(patient_id) <= '#{@end_date}')
+        AND p.program_id = #{@@program_id}
+        ORDER BY patient_state_id DESC,
+        start_date DESC
+      ) K
+      GROUP BY K.patient_program_id HAVING (name = '#{outcome_name}')
+      ORDER BY K.patient_state_id , K.start_date").map do |state|
+        start_date_death_date << [state.date_enrolled , state.start_date]
+      end
     start_date_death_date
   end
 
@@ -410,17 +433,32 @@ class Cohort
   end
 
   def total_alive_and_on_art
+    on_art_concept_name = ConceptName.find_all_by_name('On antiretrovirals')
+    state = ProgramWorkflowState.find(
+      :first,
+      :conditions => ["concept_id IN (?)",
+                      on_art_concept_name.map{|c|c.concept_id}]
+    ).program_workflow_state_id
+
     PatientState.find_by_sql("SELECT * FROM (
-                              SELECT s.patient_program_id, patient_id,patient_state_id,start_date,n.name name,state
-                              FROM patient_state s
-                              INNER JOIN patient_program p ON p.patient_program_id = s.patient_program_id
-                              INNER JOIN program_workflow_state w ON w.program_workflow_id = p.program_id AND w.program_workflow_state_id = s.state
-                              INNER JOIN concept_name n ON w.concept_id = n.concept_id
-                              WHERE p.voided = 0 AND s.voided = 0 
-                              AND (patient_start_date(patient_id) >= '#{@@first_registration_date}' AND patient_start_date(patient_id) <= '#{@end_date}')
-                              AND p.program_id = #{@@program_id} ORDER BY patient_state_id DESC , start_date DESC) K
-                              GROUP BY K.patient_program_id HAVING (name = 'ON ANTIRETROVIRALS' OR name = 'ON TREATMENT')
-                              ORDER BY K.patient_state_id DESC , K.start_date DESC").length#map{| state | states << [state.patient_id , state.name] }
+        SELECT s.patient_program_id, patient_id,patient_state_id,start_date,
+               n.name name,state
+        FROM patient_state s
+        INNER JOIN patient_program p ON p.patient_program_id =
+                                        s.patient_program_id
+        INNER JOIN program_workflow pw ON pw.program_id = p.program_id
+        INNER JOIN program_workflow_state w ON w.program_workflow_id =
+                                               pw.program_workflow_id
+        AND w.program_workflow_state_id = s.state
+        INNER JOIN concept_name n ON w.concept_id = n.concept_id
+        WHERE p.voided = 0 AND s.voided = 0
+        AND (patient_start_date(patient_id) >= '#{@@first_registration_date}'
+        AND patient_start_date(patient_id) <= '#{@end_date}')
+        AND p.program_id = #{@@program_id}
+        ORDER BY patient_state_id DESC, start_date DESC
+      ) K
+      GROUP BY K.patient_id HAVING (state = #{state})
+      ORDER BY K.patient_state_id DESC, K.start_date DESC").length
   end
 
   def tb_within_the_last_2_yrs(start_date = @start_date, end_date = @end_date)
@@ -460,7 +498,9 @@ class Cohort
                                 INNER JOIN patient_state s ON p.patient_program_id = s.patient_program_id
                                 INNER JOIN concept_name n ON n.concept_id = obs.value_coded
                                 WHERE patient_start_date(patient_id) >='#{start_date}' AND patient_start_date(patient_id) <= '#{end_date}' 
-                                AND obs.concept_id = #{reason_concept_id} AND p.program_id = #{@@program_id}
+                                AND obs.concept_id = #{reason_concept_id}
+                                AND p.program_id = #{@@program_id}
+                                AND n.name != ''
                                 GROUP BY patient_id").map{ | value | value.name }
     
   end
@@ -471,12 +511,12 @@ class Cohort
     tb_status_concept_id = ConceptName.find_by_name('TB STATUS').concept_id
     art_visit_encounter_id = EncounterType.find_by_name('ART VISIT').id
 
-    PatientState.find_by_sql("SELECT * FROM (
-                          SELECT e.patient_id,n.name name,obs_datetime,e.encounter_datetime
+    status = PatientState.find_by_sql("SELECT * FROM (
+                          SELECT e.patient_id,n.name tbstatus,obs_datetime,e.encounter_datetime,s.state
                           FROM patient_state s
                           INNER JOIN patient_program p ON p.patient_program_id = s.patient_program_id   
                           INNER JOIN encounter e ON e.patient_id = p.patient_id
-                          INNER JOIN obs ON obs.encounter_id = obs.encounter_id 
+                          INNER JOIN obs ON obs.encounter_id = e.encounter_id
                           INNER JOIN concept_name n ON obs.value_coded = n.concept_id
                           WHERE p.voided = 0 AND s.voided = 0
                           AND obs.obs_datetime = e.encounter_datetime
@@ -486,14 +526,14 @@ class Cohort
                           AND p.program_id = #{@@program_id}
                           ORDER BY e.encounter_datetime DESC, patient_state_id DESC , start_date DESC) K
                           GROUP BY K.patient_id
-                          ORDER BY K.encounter_datetime DESC , K.obs_datetime DESC").map{| state | status << state.name }
+                          ORDER BY K.encounter_datetime DESC , K.obs_datetime DESC").map(&:tbstatus)
 
     ( status || [] ).each do | state |
       if state == 'TB NOT SUSPECTED' or state == 'noSusp' or state == 'noSup' or state == 'TB not suspected' or state == 'TB NOT suspected' or state == 'Nosup'
         tb_status_hash['TB STATUS']['Not Suspected'] += 1
       elsif state == 'TB SUSPECTED' or state == 'susp' or state == 'sup' or state == 'TB suspected' or state == 'Tb suspected'
         tb_status_hash['TB STATUS']['Suspected'] += 1
-      elsif state == 'RX' or state == 'CONFIRMED TB ON TREATMENT' or state == 'Rx' or state == 'ONFIRMED TB ON TREATMENT' or state == 'Onfirmed TB on treatment' or state == 'Confirmed TB on treatment' or state == 'Norx'
+      elsif state == 'RX' or state == 'CONFIRMED TB ON TREATMENT' or state == 'Rx' or state == 'CONFIRMED TB ON TREATMENT' or state == 'Confirmed TB on treatment' or state == 'Confirmed TB on treatment' or state == 'Norx'
         tb_status_hash['TB STATUS']['On Treatment'] += 1
       elsif state == 'noRX' or state == 'CONFIRMED TB NOT ON TREATMENT' or state =='Confirmed TB not on treatment' or state == 'Confirmed TB NOT on treatment'
         tb_status_hash['TB STATUS']['Not on treatment'] += 1
