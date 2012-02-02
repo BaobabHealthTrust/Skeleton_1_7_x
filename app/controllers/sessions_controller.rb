@@ -1,31 +1,30 @@
 class SessionsController < ApplicationController
-	skip_before_filter :login_required, :except => [:location, :update]
-	skip_before_filter :location_required
+  skip_before_filter :login_required, :except => [:location, :update]
+  skip_before_filter :location_required
 
-	def new
+  def new
+  end
+
+  def create
+    logout_keeping_session!
+    user = User.authenticate(params[:login], params[:password])
+    if user
+      self.current_user = user      
+      redirect_to '/clinic'
+    else
+      note_failed_signin
+      @login = params[:login]
+      render :action => 'new'
+    end
+  end
+
+  # Form for entering the location information
+  def location
+    @login_wards = (CoreService.get_global_property_value('facility.login_wards')).split(',') rescue []
+	if (CoreService.get_global_property_value('select_login_location').to_s == "true" rescue false)
+	    render :template => 'sessions/select_location'
 	end
-
-	def create
-		logout_keeping_session!
-		user = User.authenticate(params[:login], params[:password])
-		if user
-			self.current_user = user      
-			redirect_to '/clinic'
-		else
-			note_failed_signin
-			@login = params[:login]
-			render :action => 'new'
-		end
-	end
-
-	# Form for entering the location information
-	def location
-		@login_wards = (CoreService.get_global_property_value('facility.login_wards')).split(',') rescue []
-
-		if (CoreService.get_global_property_value('select_login_location').to_s == "true" rescue false)
-			render :template => 'sessions/select_location'
-		end
-	end
+  end
 
 	# Update the session with the location information
 	def update    
@@ -37,7 +36,13 @@ class SessionsController < ApplicationController
 
 		unless location and valid_location
 			flash[:error] = "Invalid workstation location"
-			render :action => 'location'
+
+			@login_wards = (CoreService.get_global_property_value('facility.login_wards')).split(',') rescue []
+			if (CoreService.get_global_property_value('select_login_location').to_s == "true" rescue false)
+				render :template => 'sessions/select_location'
+			else
+				render :action => 'location'
+			end
 			return    
 		end
 		self.current_location = location
@@ -48,16 +53,16 @@ class SessionsController < ApplicationController
 		end
 	end
 
-	def destroy
-		logout_killing_session!
-		flash[:notice] = "You have been logged out."
-		redirect_back_or_default('/')
-	end
+  def destroy
+    logout_killing_session!
+    flash[:notice] = "You have been logged out."
+    redirect_back_or_default('/')
+  end
 
-	protected
-	# Track failed login attempts
-	def note_failed_signin
-		flash[:error] = "Invalid user name or password"
-		logger.warn "Failed login for '#{params[:login]}' from #{request.remote_ip} at #{Time.now.utc}"
-	end
+protected
+  # Track failed login attempts
+  def note_failed_signin
+    flash[:error] = "Invalid user name or password"
+    logger.warn "Failed login for '#{params[:login]}' from #{request.remote_ip} at #{Time.now.utc}"
+  end
 end
