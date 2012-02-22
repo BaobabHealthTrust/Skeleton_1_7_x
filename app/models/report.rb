@@ -274,4 +274,31 @@ ORDER BY clinic ASC"])
     results
   end
 
+  def self.set_appointments(date = Date.today,identifier_type = 'Filing number')
+    concept_id = ConceptName.find_by_name("Appointment date").concept_id
+    records = Observation.find(:all,:joins =>"INNER JOIN person p 
+      ON p.person_id = obs.person_id
+      INNER JOIN person_name n ON p.person_id=n.person_id                                 
+      RIGHT JOIN patient_identifier i ON i.patient_id = obs.person_id 
+      AND i.identifier_type = (SELECT patient_identifier_type_id 
+      FROM patient_identifier_type pi WHERE pi.name = '#{identifier_type}')",
+      :conditions =>["obs.concept_id=? AND value_datetime >= ? AND value_datetime <=?",
+      concept_id,date.strftime('%Y-%m-%d 00:00:00'),date.strftime('%Y-%m-%d 23:59:59')],
+      :select =>"obs.obs_id obs_id,obs.person_id patient_id,n.given_name first_name,n.family_name last_name, 
+      p.gender gender,p.birthdate birthdate, obs.obs_datetime visit_date , i.identifier identifier",
+      :order => "obs.obs_datetime DESC")
+
+    demographics = {}
+    (records || []).each do |r|
+      demographics[r.obs_id] = {:first_name => r.first_name,
+                            :last_name => r.last_name,
+                            :gender => r.gender,
+                            :birthdate => r.birthdate,
+                            :visit_date => r.visit_date,
+                            :patient_id => r.patient_id,
+                            :identifier => r.identifier}
+    end
+    return demographics
+  end
+
 end
