@@ -47,6 +47,7 @@ class PatientProgram < ActiveRecord::Base
   end
   
   def transition(params)
+	#raise params.to_yaml
     ActiveRecord::Base.transaction do
       # Find the state by name
       # Used upcase below as we were having problems matching the concept fullname with the state
@@ -68,11 +69,18 @@ class PatientProgram < ActiveRecord::Base
           :end_date => params[:end_date]
         })
         state.save!
+
+		if selected_state.terminal == 1
+			complete(params[:start_date])
+		else
+			complete(nil)
+		end
+
       end  
     end
   end
   
-  def complete(end_date)
+  def complete(end_date = nil)
     self.date_completed = end_date
     self.save!
   end
@@ -83,7 +91,7 @@ class PatientProgram < ActiveRecord::Base
   # obs must be the current health center, not the station!
   def current_regimen
     location_id = Location.current_health_center.location_id
-    obs = patient.person.observations.recent(1).all(:joins => :encounter, :conditions => ['value_coded IN (?) AND encounter.location_id = ?', regimens, location_id])
+    obs = patient.person.observations.recent(1).all(:conditions => ['value_coded IN (?) AND location_id = ?', regimens, location_id])
     obs.first.value_coded rescue nil
   end
 
