@@ -237,13 +237,6 @@ class PrescriptionsController < ApplicationController
       prescription[:obs_datetime]  = @encounter.encounter_datetime || (session[:datetime] ||  Time.now())
       prescription[:person_id]     = @encounter.patient_id
 
-      diagnosis_observation = Observation.create("encounter_id" => prescription[:encounter_id],
-        "concept_name" => "DIAGNOSIS",
-        "obs_datetime" => prescription[:obs_datetime],
-        "person_id" => prescription[:person_id],
-        "value_coded_or_text" => diagnosis_name)
-
-      prescription[:diagnosis] = diagnosis_observation.id
 
       @diagnosis = Observation.find(prescription[:diagnosis]) rescue nil
 
