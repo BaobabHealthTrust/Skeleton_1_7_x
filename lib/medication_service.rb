@@ -43,15 +43,10 @@ module MedicationService
 									:select => 'regimen_index',
 									:order => 'regimen_index',
 									:conditions => ['concept_id = ?', opt[0]]).uniq.first
-			if age >= 15
-				suffix = "A"
-			else
-				suffix = "P"
-			end
 
 			#[opt[0], "#{opt_reg.regimen_index}#{suffix} - #{opt[1]}"]
-			if opt_reg.regimen_index > -1
-				["#{opt_reg.regimen_index}#{suffix} - #{opt[1]}", opt[0], opt_reg.regimen_index.to_i]
+			if !opt_reg.regimen_index.blank?
+				["#{opt_reg.regimen_index} - #{opt[1]}", opt[0], opt_reg.regimen_index.to_i]
 			else
 				["#{opt[1]}", opt[0], opt_reg.regimen_index.to_i]
 			end
