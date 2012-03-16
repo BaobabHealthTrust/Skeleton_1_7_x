@@ -91,7 +91,7 @@ class PatientProgram < ActiveRecord::Base
   # obs must be the current health center, not the station!
   def current_regimen
     location_id = Location.current_health_center.location_id
-    obs = patient.person.observations.recent(1).all(:conditions => ['value_coded IN (?) AND location_id = ?', regimens, location_id])
+		obs = patient.person.observations.recent(1).all(:joins => :encounter, :conditions => ['value_coded IN (?) AND encounter.location_id = ?', regimens, location_id])
     obs.first.value_coded rescue nil
   end
 
