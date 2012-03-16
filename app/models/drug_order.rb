@@ -46,20 +46,20 @@ class DrugOrder < ActiveRecord::Base
 
   # Eventually it would be good for this to not be hard coded, and the data available in the concept table
   def self.doses_per_day(frequency)
-    return 1 if frequency == "ONCE A DAY (OD)"
-    return 2 if frequency == "TWICE A DAY (BD)"
-    return 3 if frequency == "THREE A DAY (TDS)"
-    return 4 if frequency == "FOUR TIMES A DAY (QID)"
-    return 5 if frequency == "FIVE TIMES A DAY (5X/D)"
-    return 6 if frequency == "SIX TIMES A DAY (Q4HRS)"
-    return 1 if frequency == "IN THE MORNING (QAM)"
-    return 1 if frequency == "ONCE A DAY AT NOON (QNOON)"
-    return 1 if frequency == "IN THE EVENING (QPM)"
-    return 1 if frequency == "ONCE A DAY AT NIGHT (QHS)"
-    return 0.5 if frequency == "EVERY OTHER DAY (QOD)"
-    return 1.to_f / 7.to_f if frequency == "ONCE A WEEK (QWK)"
-    return 1.to_f / 28.to_f if frequency == "ONCE A MONTH"
-    return 1.to_f / 14.to_f if frequency == "TWICE A MONTH"
+    return 1 if frequency.upcase == "ONCE A DAY (OD)"
+    return 2 if frequency.upcase == "TWICE A DAY (BD)"
+    return 3 if frequency.upcase == "THREE A DAY (TDS)"
+    return 4 if frequency.upcase == "FOUR TIMES A DAY (QID)"
+    return 5 if frequency.upcase == "FIVE TIMES A DAY (5X/D)"
+    return 6 if frequency.upcase == "SIX TIMES A DAY (Q4HRS)"
+    return 1 if frequency.upcase == "IN THE MORNING (QAM)"
+    return 1 if frequency.upcase == "ONCE A DAY AT NOON (QNOON)"
+    return 1 if frequency.upcase == "IN THE EVENING (QPM)"
+    return 1 if frequency.upcase == "ONCE A DAY AT NIGHT (QHS)"
+    return 0.5 if frequency.upcase == "EVERY OTHER DAY (QOD)"
+    return 1.to_f / 7.to_f if frequency.upcase == "ONCE A WEEK (QWK)"
+    return 1.to_f / 28.to_f if frequency.upcase == "ONCE A MONTH"
+    return 1.to_f / 14.to_f if frequency.upcase == "TWICE A MONTH"
     1
   end
   
