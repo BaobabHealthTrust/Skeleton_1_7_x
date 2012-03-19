@@ -1,7 +1,21 @@
 class EncountersController < ApplicationController
   def create(params=params, session=session)
     #raise params.to_yaml
-	
+    
+    if params[:change_appointment_date] == "true"
+      session_date = session[:datetime].to_date rescue Date.today
+      type = EncounterType.find_by_name("APPOINTMENT")                            
+      appointment_encounter = Observation.find(:first,                            
+      :order => "encounter_datetime DESC,encounter.date_created DESC",
+      :joins => "INNER JOIN encounter ON obs.encounter_id = encounter.encounter_id",
+      :conditions => ["concept_id = ? AND encounter_type = ? AND patient_id = ?
+      AND encounter_datetime >= ? AND encounter_datetime <= ?",
+      ConceptName.find_by_name('Appointment date').concept_id,
+      type.id, params[:encounter]["patient_id"],session_date.strftime("%Y-%m-%d 00:00:00"),             
+      session_date.strftime("%Y-%m-%d 23:59:59")]).encounter
+      appointment_encounter.void("Given a new appointment date")
+    end
+    	
     if params['encounter']['encounter_type_name'] == 'TB_INITIAL'
       (params[:observations] || []).each do |observation|
         if observation['concept_name'].upcase == 'TRANSFER IN' and observation['value_coded_or_text'] == "YES"
@@ -11,6 +25,15 @@ class EncountersController < ApplicationController
     end
 
     if params['encounter']['encounter_type_name'] == 'ART_INITIAL'
+
+      has_tranfer_letter = false
+      (params["observations"]).each do |ob|
+        if ob["concept_name"] == "HAS TRANSFER LETTER" 
+          has_tranfer_letter = (ob["value_coded_or_text"].upcase == "YES")
+          break
+        end
+      end
+      
       if params[:observations][0]['concept_name'].upcase == 'EVER RECEIVED ART' and params[:observations][0]['value_coded_or_text'].upcase == 'NO'
         observations = []
         (params[:observations] || []).each do |observation|
@@ -47,16 +70,139 @@ class EncountersController < ApplicationController
       end
 
       params[:observations] = observations unless observations.blank?
+
+      observations = []
+      vitals_observations = []
+      initial_observations = []
+      (params[:observations] || []).each do |observation|
+        if observation['concept_name'].upcase == 'WHO STAGES CRITERIA PRESENT'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'WHO STAGES CRITERIA PRESENT'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'CD4 COUNT LOCATION'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'CD4 COUNT DATETIME'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'CD4 COUNT'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'CD4 COUNT LESS THAN OR EQUAL TO 250'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'CD4 COUNT LESS THAN OR EQUAL TO 350'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'CD4 PERCENT'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'CD4 PERCENT LESS THAN 25'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'REASON FOR ART ELIGIBILITY'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'WHO STAGE'
+          observations << observation
+        elsif observation['concept_name'].upcase == 'BODY MASS INDEX, MEASURED'
+          bmi = nil
+          (params["observations"]).each do |ob|
+            if ob["concept_name"] == "BODY MASS INDEX, MEASURED" 
+              bmi = ob["value_numeric"]
+              break
+            end
+          end
+          next if bmi.blank? 
+          vitals_observations << observation
+        elsif observation['concept_name'].upcase == 'WEIGHT (KG)'
+          weight = 0
+          (params["observations"]).each do |ob|
+            if ob["concept_name"] == "WEIGHT (KG)" 
+              weight = ob["value_numeric"].to_f rescue 0
+              break
+            end
+          end
+          next if weight.blank? or weight < 1
+          vitals_observations << observation
+        elsif observation['concept_name'].upcase == 'HEIGHT (CM)'
+          height = 0
+          (params["observations"]).each do |ob|
+            if ob["concept_name"] == "HEIGHT (CM)" 
+              height = ob["value_numeric"].to_i rescue 0
+              break
+            end
+          end
+          next if height.blank? or height < 1
+          vitals_observations << observation
+        else
+          initial_observations << observation
+        end
+      end if has_tranfer_letter
+
+      date_started_art = nil
+      (initial_observations || []).each do |ob|
+        if ob['concept_name'].upcase == 'DATE ANTIRETROVIRALS STARTED'
+          date_started_art = ob["value_datetime"].to_date rescue nil
+          if date_started_art.blank?
+            date_started_art = ob["value_coded_or_text"].to_date rescue nil
+          end
+        end
+      end
+      
+      unless vitals_observations.blank?
+        encounter = Encounter.new()
+        encounter.encounter_type = EncounterType.find_by_name("VITALS").id
+        encounter.patient_id = params['encounter']['patient_id']
+        encounter.encounter_datetime = date_started_art 
+        if encounter.encounter_datetime.blank?                                                                        
+          encounter.encounter_datetime = params['encounter']['encounter_datetime']  
+        end 
+        if params[:filter] and !params[:filter][:provider].blank?
+          user_person_id = User.find_by_username(params[:filter][:provider]).person_id
+        else
+          user_person_id = User.find_by_user_id(params['encounter']['provider_id']).person_id
+        end
+        encounter.provider_id = user_person_id
+        encounter.save   
+        params[:observations] = vitals_observations
+        create_obs(encounter , params)
+      end
+
+      unless observations.blank? 
+        encounter = Encounter.new()
+        encounter.encounter_type = EncounterType.find_by_name("HIV STAGING").id
+        encounter.patient_id = params['encounter']['patient_id']
+        encounter.encounter_datetime = date_started_art 
+        if encounter.encounter_datetime.blank?                                                                        
+          encounter.encounter_datetime = params['encounter']['encounter_datetime']  
+        end 
+        if params[:filter] and !params[:filter][:provider].blank?
+          user_person_id = User.find_by_username(params[:filter][:provider]).person_id
+        else
+          user_person_id = User.find_by_user_id(params['encounter']['provider_id']).person_id
+        end
+        encounter.provider_id = user_person_id
+        encounter.save 
+          
+        params[:observations] = observations 
+
+        (params[:observations] || []).each do |observation|
+          if observation['concept_name'].upcase == 'CD4 COUNT' or observation['concept_name'].upcase == "LYMPHOCYTE COUNT"
+            observation['value_modifier'] = observation['value_numeric'].match(/=|>|</i)[0] rescue nil
+            observation['value_numeric'] = observation['value_numeric'].match(/[0-9](.*)/i)[0] rescue nil
+          end
+        end
+        create_obs(encounter , params)
+      end
+      params[:observations] = initial_observations if has_tranfer_letter  
     end
 
     if params['encounter']['encounter_type_name'].upcase == 'HIV STAGING'
       observations = []
       (params[:observations] || []).each do |observation|
-        if observation['concept_name'].upcase == 'CD4 COUNT'
-          observation['value_modifier'] = observation['value_numeric'].match(/<|>/)[0] rescue nil
+        if observation['concept_name'].upcase == 'CD4 COUNT' or observation['concept_name'].upcase == "LYMPHOCYTE COUNT"
+          observation['value_modifier'] = observation['value_numeric'].match(/=|>|</i)[0] rescue nil
           observation['value_numeric'] = observation['value_numeric'].match(/[0-9](.*)/i)[0] rescue nil
         end
         if observation['concept_name'].upcase == 'CD4 COUNT LOCATION' or observation['concept_name'].upcase == 'LYMPHOCYTE COUNT LOCATION'
+          observation['value_numeric'] = observation['value_coded_or_text'] rescue nil
+          observation['value_text'] = Location.find(observation['value_coded_or_text']).name.to_s rescue ""
+          observation['value_coded_or_text'] = ""
+        end
+        if observation['concept_name'].upcase == 'CD4 PERCENT LOCATION'
           observation['value_numeric'] = observation['value_coded_or_text'] rescue nil
           observation['value_text'] = Location.find(observation['value_coded_or_text']).name.to_s rescue ""
           observation['value_coded_or_text'] = ""
@@ -69,6 +215,50 @@ class EncountersController < ApplicationController
     end
 
     if params['encounter']['encounter_type_name'].upcase == 'ART ADHERENCE'
+      previous_art_visit_observations = []
+      art_adherence_observations = []
+      (params[:observations] || []).each do |observation|
+        if observation['concept_name'].upcase == 'REFER TO ART CLINICIAN'
+          previous_art_visit_observations << observation
+        elsif observation['concept_name'].upcase == 'PRESCRIBE DRUGS'
+          previous_art_visit_observations << observation
+        elsif observation['concept_name'].upcase == 'ALLERGIC TO SULPHUR'
+          previous_art_visit_observations << observation
+        else
+          art_adherence_observations << observation
+        end
+      end
+
+      unless previous_art_visit_observations.blank?
+        #if "REFER TO ART CLINICIAN","PRESCRIBE DRUGS" and "ALLERGIC TO SULPHUR" has
+        #already been asked during ART visit - we append the observations to the latest 
+        #ART visit encounter done on that day
+
+        session_date = session[:datetime].to_date rescue Date.today
+        encounter_type = EncounterType.find_by_name("ART visit")
+        encounter = Encounter.find(:first,:order =>"encounter_datetime DESC,date_created DESC",
+          :conditions =>["encounter_type=? AND patient_id=? AND encounter_datetime >= ?
+          AND encounter_datetime <= ?",encounter_type.id,params['encounter']['patient_id'],
+          session_date.strftime("%Y-%m-%d 00:00:00"),session_date.strftime("%Y-%m-%d 23:59:59")])
+        if encounter.blank?
+          encounter = Encounter.new()
+          encounter.encounter_type = encounter_type.id
+          encounter.patient_id = params['encounter']['patient_id']
+          encounter.encounter_datetime = session_date.strftime("%Y-%m-%d 00:00:01")
+          if params[:filter] and !params[:filter][:provider].blank?
+            user_person_id = User.find_by_username(params[:filter][:provider]).person_id
+          else
+            user_person_id = User.find_by_user_id(params['encounter']['provider_id']).person_id
+          end
+          encounter.provider_id = user_person_id
+          encounter.save   
+        end 
+        params[:observations] = previous_art_visit_observations
+        create_obs(encounter , params)
+      end
+
+      params[:observations] = art_adherence_observations
+
       observations = []
       (params[:observations] || []).each do |observation|
         if observation['concept_name'].upcase == 'WHAT WAS THE PATIENTS ADHERENCE FOR THIS DRUG ORDER'
@@ -138,72 +328,9 @@ class EncountersController < ApplicationController
 
     encounter.save    
 
-    # Observation handling
-    (params[:observations] || []).each do |observation|
 
-      # Check to see if any values are part of this observation
-      # This keeps us from saving empty observations
-      values = ['coded_or_text', 'coded_or_text_multiple', 'group_id', 'boolean', 'coded', 'drug', 'datetime', 'numeric', 'modifier', 'text'].map{|value_name|
-        observation["value_#{value_name}"] unless observation["value_#{value_name}"].blank? rescue nil
-      }.compact
-
-      next if values.length == 0
-      observation[:value_text] = observation[:value_text].join(", ") if observation[:value_text].present? && observation[:value_text].is_a?(Array)
-      observation.delete(:value_text) unless observation[:value_coded_or_text].blank?
-      observation[:encounter_id] = encounter.id
-      observation[:obs_datetime] = encounter.encounter_datetime || Time.now()
-      observation[:person_id] ||= encounter.patient_id
-      observation[:concept_name].upcase ||= "DIAGNOSIS" if encounter.type.name.upcase == "OUTPATIENT DIAGNOSIS"
-      
-      # Handle multiple select
-
-      if observation[:value_coded_or_text_multiple] && observation[:value_coded_or_text_multiple].is_a?(String)
-        observation[:value_coded_or_text_multiple] = observation[:value_coded_or_text_multiple].split(';')
-      end
-      
-      if observation[:value_coded_or_text_multiple] && observation[:value_coded_or_text_multiple].is_a?(Array)
-        observation[:value_coded_or_text_multiple].compact!
-        observation[:value_coded_or_text_multiple].reject!{|value| value.blank?}
-      end  
-      
-      # convert values from 'mmol/litre' to 'mg/declitre'
-      if(observation[:measurement_unit])
-        observation[:value_numeric] = observation[:value_numeric].to_f * 18 if ( observation[:measurement_unit] == "mmol/l")
-        observation.delete(:measurement_unit)
-      end
-
-      if(observation[:parent_concept_name])
-        concept_id = Concept.find_by_name(observation[:parent_concept_name]).id rescue nil
-        observation[:obs_group_id] = Observation.find(:first, :conditions=> ['concept_id = ? AND encounter_id = ?',concept_id, encounter.id]).id rescue ""
-        observation.delete(:parent_concept_name)
-      end
-      
-      extracted_value_numerics = observation[:value_numeric]
-      extracted_value_coded_or_text = observation[:value_coded_or_text]
-
-      if observation[:value_coded_or_text_multiple] && observation[:value_coded_or_text_multiple].is_a?(Array) && !observation[:value_coded_or_text_multiple].blank?
-        
-        values = observation.delete(:value_coded_or_text_multiple)
-        values.each do |value| 
-            observation[:value_coded_or_text] = value
-            if observation[:concept_name].humanize == "Tests ordered"
-                observation[:accession_number] = Observation.new_accession_number 
-            end
-            Observation.create(observation) 
-        end
-      elsif extracted_value_numerics.class == Array
-            
-        extracted_value_numerics.each do |value_numeric|
-          observation[:value_numeric] = value_numeric
-          Observation.create(observation)
-        end
-        
-      else      
-        observation.delete(:value_coded_or_text_multiple)
-
-        Observation.create(observation)
-      end
-    end
+    #create observations for the just created encounter
+    create_obs(encounter , params)   
 
     # Program handling
     date_enrolled = params[:programs][0]['date_enrolled'].to_time rescue nil
@@ -211,6 +338,14 @@ class EncountersController < ApplicationController
     (params[:programs] || []).each do |program|
       # Look up the program if the program id is set      
       @patient_program = PatientProgram.find(program[:patient_program_id]) unless program[:patient_program_id].blank?
+
+      #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+      #if params[:location] is not blank == migration params
+      if params[:location]
+        next if not @patient.patient_programs.in_programs("HIV PROGRAM").blank?
+      end
+      #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
       # If it wasn't set, we need to create it
       unless (@patient_program)
         @patient_program = @patient.patient_programs.create(
@@ -284,6 +419,7 @@ class EncountersController < ApplicationController
 
     # Go to the next task in the workflow (or dashboard)
     # only redirect to next task if location parameter has not been provided
+
     unless params[:location]
     #find a way of printing the lab_orders labels
      if params['encounter']['encounter_type_name'] == "LAB ORDERS"
@@ -293,6 +429,9 @@ class EncountersController < ApplicationController
      else
       if params['encounter']['encounter_type_name'].to_s.upcase == "APPOINTMENT" && !params[:report_url].nil? && !params[:report_url].match(/report/).nil?
          redirect_to  params[:report_url].to_s and return
+      elsif params['encounter']['encounter_type_name'].upcase == 'APPOINTMENT'
+        print_and_redirect("/patients/dashboard_print_visit/#{params[:encounter]['patient_id']}","/patients/show/#{params[:encounter]['patient_id']}")
+        return
       end
       redirect_to next_task(@patient)
      end
@@ -318,8 +457,8 @@ class EncountersController < ApplicationController
 		else
 			@retrospective = false
 		end
-
 		@current_height = PatientService.get_patient_attribute_value(@patient, "current_height")
+
 		@min_weight = PatientService.get_patient_attribute_value(@patient, "min_weight")
         @max_weight = PatientService.get_patient_attribute_value(@patient, "max_weight")
         @min_height = PatientService.get_patient_attribute_value(@patient, "min_height")
@@ -337,8 +476,8 @@ class EncountersController < ApplicationController
         if 'tb_reception'.upcase == (params[:encounter_type].upcase rescue '')
             @phone_numbers = PatientService.phone_numbers(Person.find(params[:patient_id]))
         end
-        
-        if 'ART_VISIT' == (params[:encounter_type].upcase rescue '')
+       
+        if 'ART_VISIT' == (params[:encounter_type].upcase rescue '') || 'ART_ADHERENCE' == (params[:encounter_type].upcase rescue '')
             session_date = session[:datetime].to_date rescue Date.today
 
             @allergic_to_sulphur = Observation.find(Observation.find(:first,                   
@@ -351,8 +490,8 @@ class EncountersController < ApplicationController
                             :order => "obs_datetime DESC,date_created DESC",            
                             :conditions => ["person_id = ? AND concept_id = ? AND DATE(obs_datetime) = ?",
                             @patient.id,ConceptName.find_by_name("Prescribe drugs").concept_id,session_date])).to_s.strip.squish rescue ''        
-        
-        end
+            
+        end 
         
         if (params[:encounter_type].upcase rescue '') == 'UPDATE HIV STATUS'
             @referred_to_htc = get_todays_observation_answer_for_encounter(@patient.id, "UPDATE HIV STATUS", "Refer to HTC")
@@ -369,7 +508,9 @@ class EncountersController < ApplicationController
 				o.answer_string if o.to_s.include?("Transfer out to")} rescue nil
 
 		@recent_sputum_results = PatientService.recent_sputum_results(@patient.id) rescue nil
-    	@recent_sputum_submissions = PatientService.recent_sputum_submissions(@patient_id) rescue nil
+
+    	@recent_sputum_submissions = PatientService.recent_sputum_submissions(@patient.id) 	
+
 		@continue_treatment_at_site = []
 		Encounter.find(:last,:conditions =>["encounter_type = ? and patient_id = ? AND DATE(encounter_datetime) = ?",
 		EncounterType.find_by_name("TB CLINIC VISIT").id,
@@ -393,7 +534,11 @@ class EncountersController < ApplicationController
 		@tb_patient = is_tb_patient(@patient)
 		@art_patient = PatientService.art_patient?(@patient)
 		@recent_lab_results = patient_recent_lab_results(@patient.id)
-		@number_of_days_to_add_to_next_appointment_date = number_of_days_to_add_to_next_appointment_date(@patient, session[:datetime] || Date.today)
+		if (params[:encounter_type].upcase rescue '') == 'APPOINTMENT'
+      #for now we disable this because we are already checking for this
+      #in the browser - the method is suggested_return_date
+			#@number_of_days_to_add_to_next_appointment_date = number_of_days_to_add_to_next_appointment_date(@patient, session[:datetime] || Date.today)
+		end
 		@drug_given_before = PatientService.drug_given_before(@patient, session[:datetime])
 
 		use_regimen_short_names = CoreService.get_global_property_value("use_regimen_short_names") rescue "false"
@@ -534,7 +679,7 @@ class EncountersController < ApplicationController
 			end
         end
 
-		if (params[:encounter_type].upcase rescue '') == 'HIV_STAGING'
+		if (params[:encounter_type].upcase rescue '') == 'HIV_STAGING' or (params[:encounter_type].upcase rescue '') == 'ART_INITIAL'
 			if @patient_bean.age > 14 
 				@who_stage_i = concept_set('WHO STAGE I ADULT AND PEDS') + concept_set('WHO STAGE I ADULT')
 				@who_stage_ii = concept_set('WHO STAGE II ADULT AND PEDS') + concept_set('WHO STAGE II ADULT')
@@ -554,11 +699,39 @@ class EncountersController < ApplicationController
 				end
 			end
 
-			if !@retrospective
-				@who_stage_i = @who_stage_i - concept_set('Unspecified Staging Conditions')
-				@who_stage_ii = @who_stage_ii - concept_set('Unspecified Staging Conditions')
-				@who_stage_iii = @who_stage_iii - concept_set('Unspecified Staging Conditions')
-				@who_stage_iv = @who_stage_iv - concept_set('Unspecified Staging Conditions') - concept_set('Calculated WHO HIV staging conditions')
+			if (params[:encounter_type].upcase rescue '') == 'HIV_STAGING'
+				#added current weight to use on HIV staging for infants
+				@current_weight = PatientService.get_patient_attribute_value(@patient,
+													                  "current_weight")
+				if !@retrospective
+					@who_stage_i = @who_stage_i - concept_set('Unspecified Staging Conditions')
+					@who_stage_ii = @who_stage_ii - concept_set('Unspecified Staging Conditions')
+					@who_stage_iii = @who_stage_iii - concept_set('Unspecified Staging Conditions')
+					@who_stage_iv = @who_stage_iv - concept_set('Unspecified Staging Conditions') - concept_set('Calculated WHO HIV staging conditions')
+				end
+
+				@moderate_wasting = []
+				@severe_wasting = []
+				if @patient_bean.age < 15
+					median_weight_height = WeightHeightForAge.median_weight_height(@patient_bean.age_in_months, @patient.person.gender) rescue []
+					current_weight_percentile = (@current_weight/(median_weight_height[0])*100)
+
+					if current_weight_percentile >= 70 && current_weight_percentile <= 79
+						@moderate_wasting = ["Moderate unexplained wasting/malnutrition not responding to treatment (weight-for-height/ -age 70-79% or muac 11-12 cm)"]
+						@who_stage_iii = @who_stage_iii.flatten.uniq if CoreService.get_global_property_value('use.extended.staging.questions').to_s != "true"       
+						@severe_wasting = []
+					elsif current_weight_percentile < 70
+						@severe_wasting = ["Severe unexplained wasting or malnutrition not responding to treatment (weight-for-height/ -age <70% or MUAC less than 11cm or oedema)"]
+						@who_stage_iv = @who_stage_iv.flatten.uniq if CoreService.get_global_property_value('use.extended.staging.questions').to_s != "true"
+						@moderate_wasting = []
+					end
+				end
+				
+				reason_for_art = @patient.person.observations.recent(1).question("REASON FOR ART ELIGIBILITY").all rescue []
+		        @reason_for_art_eligibility = PatientService.reason_for_art_eligibility(@patient)
+				if !@reason_for_art_eligibility.nil? && @reason_for_art_eligibility.upcase == 'NONE'
+					@reason_for_art_eligibility = nil				
+				end
 			end
 			
 			if @tb_status == true && @hiv_status != 'Negative'
@@ -572,8 +745,32 @@ class EncountersController < ApplicationController
 			#raise CoreService.get_global_property_value('use.extended.staging.questions').to_s
 			#raise @not_explicitly_asked.to_yaml
 			#raise concept_set('PRESUMED SEVERE HIV CRITERIA IN INFANTS').to_yaml
+      #@who_stage_iv = @who_stage_iv.flatten.uniq
+      
 		end
 
+		@arv_drugs = nil
+		if (params[:encounter_type].upcase rescue '') == 'ART_INITIAL'
+			other = []
+
+			@arv_drugs = MedicationService.arv_drugs.collect { | drug | 
+				if (CoreService.get_global_property_value('use_regimen_short_names').to_s == "true" rescue false)					
+					other << [drug.concept.shortname, drug.concept.shortname] if (drug.concept.shortname.upcase.include?('OTHER') || drug.concept.shortname.upcase.include?('UNKNOWN'))
+					[drug.concept.shortname, drug.concept.shortname] 
+				else
+					other << [drug.concept.fullname, drug.concept.fullname] if (drug.concept.fullname.upcase.include?('OTHER') || drug.concept.fullname.upcase.include?('UKNOWN'))
+					[drug.concept.fullname, drug.concept.fullname]
+				end
+			}
+			@arv_drugs = @arv_drugs - other
+			@arv_drugs = @arv_drugs.sort {|a,b| a.to_s.downcase <=> b.to_s.downcase}
+			@arv_drugs = @arv_drugs + other
+
+      @require_art_initial = require_art_initial
+
+			#raise @arv_drugs.to_yaml
+			#raise drugs.to_yaml
+		end
 		redirect_to "/" and return unless @patient
 
 		redirect_to next_task(@patient) and return unless params[:encounter_type]
@@ -593,34 +790,61 @@ class EncountersController < ApplicationController
 		return @role
 	end
 
+
+	def extract_regions
+		
+		ta = Region.all.collect { | element |
+			 [element.region_id.to_s  + ',' + element.name]
+		}
+		render :text => "'" + ta.join("' ; '") + "'"
+	end
+
+	def extract_districts
+		
+		ta = District.all.collect { | element |
+			 [element.district_id.to_s  + ',' + element.name + ',' + element.region_id.to_s + ',' + element.region.name]
+		}
+		render :text => "'" + ta.join("' ; '") + "'"
+	end
+
+	def extract_tas
+		
+		ta = TraditionalAuthority.all.collect { | element |
+			 [element.traditional_authority_id.to_s  + "," + element.name + "," + element.district_id.to_s + "," + element.district.name]
+		}
+		my_text = ta.join(" <br> ")
+		render :text => my_text.to_s
+	end
+
+	def extract_villages
+		
+		ta = Village.all.collect { | element |
+			 [element.village_id.to_s  + ',' + element.name + ',' + element.traditional_authority_id.to_s + ',' + element.traditional_authority.name + ',' + element.traditional_authority.district_id.to_s + ',' + element.traditional_authority.district.name]
+		}
+
+		my_text = ta.join(" <br> ")
+		render :text => my_text.to_s
+	end
+
 	def diagnoses
 		search_string = (params[:search_string] || '').upcase
 		filter_list = params[:filter_list].split(/, */) rescue []
-
-		diagnosis_concept = CoreService.get_global_property_value("application_diagnosis_concept")
-
-		if diagnosis_concept.blank?
-			diagnosis_concepts = ConceptClass.find_by_name("Diagnosis").concepts rescue []
-		else
-			diagnosis_concepts = ConceptName.find_by_name(diagnosis_concept).concept.concept_answers.collect {|answer|
-			  Concept.find(answer.answer_concept) rescue nil
-			}.compact rescue []
-		end
-
-		# raise diagnosis_concepts.to_yaml    
-
+		outpatient_diagnosis = ConceptName.find_by_name("DIAGNOSIS").concept
+		diagnosis_concepts = ConceptClass.find_by_name("Diagnosis", :include => {:concepts => :name}).concepts rescue []    
 		# TODO Need to check a global property for which concept set to limit things to
-		#if (false)
-		#  diagnosis_concept_set = ConceptName.find_by_name('MALAWI NATIONAL DIAGNOSIS').concept
-		#  diagnosis_concepts = Concept.find(:all, :joins => :concept_sets, :conditions => ['concept_set = ?', concept_set.id], :include => [:name])
-		#end  
+
+		#diagnosis_concept_set = ConceptName.find_by_name('MALAWI NATIONAL DIAGNOSIS').concept This should be used when the concept becames available
+		diagnosis_concept_set = ConceptName.find_by_name('MALAWI ART SYMPTOM SET').concept
+		diagnosis_concepts = Concept.find(:all, :joins => :concept_sets, :conditions => ['concept_set = ?', diagnosis_concept_set.id])
 
 		valid_answers = diagnosis_concepts.map{|concept| 
 			name = concept.fullname rescue nil
-			(!name.to_s.upcase.match(search_string.to_s.upcase).nil?) ? name : nil rescue ''
+			name.match(search_string) ? name : nil rescue nil
 		}.compact
-
-		@suggested_answers = valid_answers.sort.uniq.reject{|answer| filter_list.include?(answer) }.uniq[0..10]
+		previous_answers = []
+		# TODO Need to check global property to find out if we want previous answers or not (right now we)
+		previous_answers = Observation.find_most_common(outpatient_diagnosis, search_string)
+		@suggested_answers = (previous_answers + valid_answers).reject{|answer| filter_list.include?(answer) }.uniq[0..10] 
 		@suggested_answers = @suggested_answers - params[:search_filter].split(',') rescue @suggested_answers
 		render :text => "<li></li>" + "<li>" + @suggested_answers.join("</li><li>") + "</li>"
 	end
@@ -649,6 +873,16 @@ class EncountersController < ApplicationController
 	def observations
 		# We could eventually include more here, maybe using a scope with includes
 		@encounter = Encounter.find(params[:id], :include => [:observations])
+    observations = []
+		@encounter.observations.map do |obs|
+			if ConceptName.find_by_concept_id(obs.concept_id).name.match(/location/)
+				obs.value_numeric = ""
+				observations << obs.to_s
+			else
+				observations << obs.to_s
+		  end
+    end
+
 		render :layout => false
 	end
 
@@ -957,7 +1191,7 @@ class EncountersController < ApplicationController
         ["New", "New patient"],
         ["Failure", "Failed - TB"],
         ["Relapse", "Relapse MDR-TB patient"],
-        ["Retreatment after default", "Treatment after default MDR-TB patient"],
+        ["Treatment after default", "Treatment after default MDR-TB patient"],
         ["Other", "Other"]
       ],
       'duration_of_current_cough' => [
@@ -990,6 +1224,18 @@ class EncountersController < ApplicationController
         ['',''],
         ['Pulmonary tuberculosis (PTB)', 'Pulmonary tuberculosis'],
         ['Extrapulmonary tuberculosis (EPTB)', 'Extrapulmonary tuberculosis (EPTB)']
+      ],
+      'source_of_referral' => [
+        ['',''],
+        ['Walk in', 'Walk in'],
+        ['Healthy Facility', 'Healthy Facility'],
+        ['Index Patient', 'Index Patient'],
+        ['HTC', 'HTC clinic'],
+        ['ART', 'ART'],
+        ['PMTCT', 'PMTCT'],
+        ['Private practitioner', 'Private practitioner'],
+        ['Sputum collection point', 'Sputum collection point'],
+        ['Other','Other']
       ]
     }
   end
@@ -1144,7 +1390,8 @@ class EncountersController < ApplicationController
 
    def number_of_days_to_add_to_next_appointment_date(patient, date = Date.today)
     #because a dispension/pill count can have several drugs,we pick the drug with the lowest pill count
-    #and we also make sure the drugs in the pill count/Adherence encounter are the same as the one in Dispension encounter
+    #and we also make sure the drugs in the pill count/Adherence encounter are
+    #the same as the one in Dispension encounter
 
     concept_id = ConceptName.find_by_name('AMOUNT OF DRUG BROUGHT TO CLINIC').concept_id
     encounter_type = EncounterType.find_by_name('ART ADHERENCE')
@@ -1174,7 +1421,8 @@ class EncountersController < ApplicationController
       count_drug_count = [adh.order.drug_order.drug_inventory_id,adh.value_numeric] if count_drug_count.blank?
     end
 
-    #from the drug dispensed on that day,we pick the drug "plus it's daily dose" that match the drug with the lowest pill count
+    #from the drug dispensed on that day,we pick the drug "plus it's daily dose"
+    #that match the drug with the lowest pill count
     equivalent_daily_dose = 1
     (drug_dispensed).each do | dispensed_drug |
       drug_order = dispensed_drug.order.drug_order
@@ -1265,5 +1513,127 @@ class EncountersController < ApplicationController
     #end
 
   end
+
+	def test_create
+=begin
+		o = {:encounter_id => 26,
+			  :obs_group_id => "",
+			  :obs_datetime => Time.now,
+			  :person_id => 2,
+			  :value_numeric => "",
+			  :value_drug => "",
+			  :value_datetime => "",
+			  :value_boolean => "",
+			  :concept_name => "TB STATUS",
+			  :value_coded_or_text => "Confirmed TB NOT on treatment",
+			  :patient_id => "2",
+			  :value_modifier => "",
+			  :order_id => "",
+			  :value_coded => ""}
+
+=end
+		o = {:encounter_id => 26,
+			  :obs_datetime => Time.now,
+			  :person_id => 2,
+			  :concept_name => "TB STATUS",
+			  :value_coded_or_text => "Confirmed TB NOT on treatment",
+			  :patient_id => "2"
+			}
+
+		#raise User.current_user.to_yaml
+		#result = Observation.create(o)
+
+		result = Observation.new(o)
+		result.date_created = Time.now
+		result.creator = User.current_user
+		result.save
+		render :text => result.to_yaml
+	end
+
+  private
+
+	def create_obs(encounter , params)
+		# Observation handling
+
+		(params[:observations] || []).each do |observation|
+			# Check to see if any values are part of this observation
+			# This keeps us from saving empty observations
+			values = ['coded_or_text', 'coded_or_text_multiple', 'group_id', 'boolean', 'coded', 'drug', 'datetime', 'numeric', 'modifier', 'text'].map { |value_name|
+				observation["value_#{value_name}"] unless observation["value_#{value_name}"].blank? rescue nil
+			}.compact
+			
+			next if values.length == 0
+
+			observation[:value_text] = observation[:value_text].join(", ") if observation[:value_text].present? && observation[:value_text].is_a?(Array)
+			observation.delete(:value_text) unless observation[:value_coded_or_text].blank?
+			observation[:encounter_id] = encounter.id
+			observation[:obs_datetime] = encounter.encounter_datetime || Time.now()
+			observation[:person_id] ||= encounter.patient_id
+			observation[:concept_name].upcase ||= "DIAGNOSIS" if encounter.type.name.upcase == "OUTPATIENT DIAGNOSIS"
+
+			# Handle multiple select
+
+			if observation[:value_coded_or_text_multiple] && observation[:value_coded_or_text_multiple].is_a?(String)
+				observation[:value_coded_or_text_multiple] = observation[:value_coded_or_text_multiple].split(';')
+			end
+      
+			if observation[:value_coded_or_text_multiple] && observation[:value_coded_or_text_multiple].is_a?(Array)
+				observation[:value_coded_or_text_multiple].compact!
+				observation[:value_coded_or_text_multiple].reject!{|value| value.blank?}
+			end  
+      
+			# convert values from 'mmol/litre' to 'mg/declitre'
+			if(observation[:measurement_unit])
+				observation[:value_numeric] = observation[:value_numeric].to_f * 18 if ( observation[:measurement_unit] == "mmol/l")
+				observation.delete(:measurement_unit)
+			end
+
+			if(observation[:parent_concept_name])
+				concept_id = Concept.find_by_name(observation[:parent_concept_name]).id rescue nil
+				observation[:obs_group_id] = Observation.find(:first, :conditions=> ['concept_id = ? AND encounter_id = ?',concept_id, encounter.id]).id rescue ""
+				observation.delete(:parent_concept_name)
+			end
+      
+			extracted_value_numerics = observation[:value_numeric]
+			extracted_value_coded_or_text = observation[:value_coded_or_text]
+
+			if observation[:value_coded_or_text_multiple] && observation[:value_coded_or_text_multiple].is_a?(Array) && !observation[:value_coded_or_text_multiple].blank?
+				values = observation.delete(:value_coded_or_text_multiple)
+				values.each do |value| 
+					observation[:value_coded_or_text] = value
+					if observation[:concept_name].humanize == "Tests ordered"
+						observation[:accession_number] = Observation.new_accession_number 
+					end
+
+					observation = update_observation_value(observation)
+
+					Observation.create(observation) 
+				end
+			elsif extracted_value_numerics.class == Array
+				extracted_value_numerics.each do |value_numeric|
+					observation[:value_numeric] = value_numeric
+					Observation.create(observation)
+				end
+			else      
+				observation.delete(:value_coded_or_text_multiple)
+				observation = update_observation_value(observation) if !observation[:value_coded_or_text].blank?
+				Observation.create(observation)
+			end
+		end
+  	end
+
+	def update_observation_value(observation)
+		value = observation[:value_coded_or_text]
+		value_coded_name = ConceptName.find_by_name(value)
+
+		if value_coded_name.blank?
+			observation[:value_text] = value
+		else
+			observation[:value_coded_name_id] = value_coded_name.concept_name_id
+			observation[:value_coded] = value_coded_name.concept_id
+		end
+		observation.delete(:value_coded_or_text)
+		return observation
+	end
 
 end
