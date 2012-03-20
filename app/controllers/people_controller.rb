@@ -561,7 +561,13 @@ private
 			# TODO: This needs to be redesigned!!!!!!!!!!!
 			#
 			#url_for(:controller => :encounters, :action => :new, :patient_id => found_person_id)
-			url_for(:controller => :people, :action => :confirm , :found_person_id =>found_person_id)
+			patient = Person.find(found_person_id).patient
+			show_confirmation = CoreService.get_global_property_value('show.patient.confirmation').to_s == "true" rescue false
+			if show_confirmation
+				url_for(:controller => :people, :action => :confirm , :found_person_id =>found_person_id)
+			else
+				next_task(patient)
+			end
 		end
 	end
 end
