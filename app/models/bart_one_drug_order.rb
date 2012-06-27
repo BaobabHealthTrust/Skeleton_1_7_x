@@ -6,7 +6,7 @@ class BartOneDrugOrder < ActiveRecord::Base
 
 
   def after_save
-    Pharmacy.drug_dispensed_stock_adjustment(self.drug_inventory_id,self.quantity,self.encounter.encounter_datetime)
+    #Pharmacy.drug_dispensed_stock_adjustment(self.drug_inventory_id,self.quantity,self.encounter.encounter_datetime)
   end
 
   def to_s

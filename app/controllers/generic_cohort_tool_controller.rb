@@ -1,0 +1,3 @@
+class GenericCohortToolController < ApplicationController
+end
+

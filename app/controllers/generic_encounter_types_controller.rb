@@ -1,0 +1,3 @@
+class GenericEncounterTypesController < ApplicationController
+
+end

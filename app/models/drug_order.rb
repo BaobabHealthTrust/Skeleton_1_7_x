@@ -99,7 +99,7 @@ class DrugOrder < ActiveRecord::Base
       order = encounter.orders.create(
         :order_type_id => 1, 
         :concept_id => drug.concept_id, 
-        :orderer => User.current_user.user_id, 
+        :orderer => User.current.user_id, 
         :patient_id => patient.id,
         :start_date => start_date,
         :auto_expire_date => auto_expire_date,
@@ -158,25 +158,6 @@ class DrugOrder < ActiveRecord::Base
     (duration * equivalent_daily_dose)
   end
 
-  def self.all_orders_complete(patient,encounter_date)                               
-    type = EncounterType.find_by_name('TREATMENT').id                           
-    all = Encounter.find(:all,                                                  
-      :conditions =>["patient_id = ? AND encounter_datetime BETWEEN ? AND ?           
-      AND encounter_type = ?",patient.id , 
-      encounter_date.to_date.strftime('%Y-%m-%d 00:00:00'),
-      encounter_date.to_date.strftime('%Y-%m-%d 23:59:59') , 
-      type])              
-                                                                                
-    complete = true                                                             
-    (all || []).each do |encounter|                                             
-      encounter.drug_orders.each do | drug_order |                              
-        complete = (drug_order.amount_needed <= 0)                              
-        return complete unless complete                                         
-      end                                                                       
-    end                                                                         
-    return complete                                                             
-  end  
-  
   def self.prescription_dates(patient,date)
     type = EncounterType.find_by_name('TREATMENT').id                           
     all = Encounter.find(:all,                                                  

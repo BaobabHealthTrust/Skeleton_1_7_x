@@ -13,7 +13,7 @@ class Encounter < ActiveRecord::Base
   named_scope :current, :conditions => 'DATE(encounter.encounter_datetime) = CURRENT_DATE()'
 
   def before_save
-    self.provider = User.current_user.person if self.provider.blank?
+    self.provider = User.current.person if self.provider.blank?
     # TODO, this needs to account for current visit, which needs to account for possible retrospective entry
     self.encounter_datetime = Time.now if self.encounter_datetime.blank?
   end
