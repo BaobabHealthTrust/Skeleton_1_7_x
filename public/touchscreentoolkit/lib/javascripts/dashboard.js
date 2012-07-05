@@ -418,9 +418,10 @@ function generateDashboard(){
     var gender = document.createElement("div");
     gender.id = "gendercell";
     if(__$('patient_gender')){
-        gender.innerHTML = "<div id='gender'><img src='/images/" +
+        gender.innerHTML = "<div id='gender' style='padding-left: 3px; padding-top: 2px; " + 
+            "height: 25px; width: 25px;' class='" +
         (__$('patient_gender').innerHTML.toLowerCase().trim() == "female" ? "female" : "male") +
-        ".gif' height='25px' width='25px' style='padding-left: 3px; padding-top: 2px;' /></div>";
+        "' /></div>";
     }
 
     topicRow.appendChild(gender);
@@ -501,7 +502,16 @@ function generateDashboard(){
         ageRow.appendChild(agevalue);
     }
 
-    if(__$('project_name')){
+    if(__$('custom_banner')){
+        var application = document.createElement("div");
+        application.id = "patient-dashboard-custom";
+
+        content.appendChild(application);
+
+        application.innerHTML = "<iframe src='" + (__$('custom_banner').getAttribute("path") ? 
+            __$('custom_banner').getAttribute("path") : "") + "' id='custom_page'></iframe>";;
+
+    } else if(__$('project_name')){
         var application = document.createElement("div");
         application.id = "patient-dashboard-application";
 
@@ -604,7 +614,10 @@ function generateDashboard(){
             var page = (children[i].value.trim() != children[i].innerHTML.trim() ? children[i].value :
                 "tabpages/" + children[i].innerHTML.trim().toLowerCase().replace(/\s/gi, "_") + ".html")
 
-            heading.push([children[i].innerHTML.trim(), page]);
+            var selectedtab = (children[i].getAttribute("selectedTab") ? true : false);
+            var alerttab = (children[i].getAttribute("alertTab") ? true : false);
+            
+            heading.push([children[i].innerHTML.trim(), page, selectedtab, alerttab]);
         }
 
         generateTab(heading, __$("patient-dashboard-main"))
@@ -661,7 +674,8 @@ function generateDashboard(){
                         window.location = this.getAttribute("link");
                     }
                 }
-            } else if ((j == 0 && tt_cancel_destination) || (!tt_cancel_show && !tt_cancel_destination && j == 1)) {
+            } else if (((j == 0 && tt_cancel_destination) || 
+                (!tt_cancel_show && !tt_cancel_destination && j == 1)) && !__$("btnNext")) {
                 button.className = "green";
                 button.id = "btnNext";
                 button.style.cssFloat = "right";
@@ -804,10 +818,26 @@ function activate(id){
 
             __$(page_id).src = page;
 
-            __$(controls[i]).className = "active-tab";
+            if(__$(controls[i]).getAttribute("selectedTab")){
+                __$(controls[i]).className = "selectedHighlightedTab";
+            } else if(__$(controls[i]).getAttribute("alertTab")){
+                __$(controls[i]).className = "selectedAlertTab";
+            } else {
+                __$(controls[i]).className = "active-tab";
+            }
+            
             __$("view_" + controls[i]).style.display = "block";
         } else {
-            __$(controls[i]).className = "inactive-tab";
+            
+            if(__$(controls[i]).getAttribute("selectedTab")){
+                __$(controls[i]).className = "deSelectedHighlightedTab";
+            } else if(__$(controls[i]).getAttribute("alertTab")){
+                __$(controls[i]).className = "deSelectedAlertTab";
+            } else {
+                __$(controls[i]).className = "inactive-tab";
+            }
+            //__$(controls[i]).className = "inactive-tab";
+            
             __$("view_" + controls[i]).style.display = "none";
         }
     }
@@ -879,6 +909,15 @@ function generateTab(headings, target, content){
         }
         tab.innerHTML = headings[i][0];
         tab.setAttribute("link", headings[i][1]);
+        
+        if(headings[i][2]){
+            tab.setAttribute("selectedTab", true);
+        }
+        
+        if(headings[i][3]){
+            tab.setAttribute("alertTab", true);
+        }
+        
         tab.onclick = function(){
             activate(this.id);
         }
