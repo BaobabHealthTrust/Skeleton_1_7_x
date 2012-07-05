@@ -1130,47 +1130,31 @@ class Cohort
                               ConceptName.find_by_name('SKIN RASH').concept_id,
                               ConceptName.find_by_name('JAUNDICE').concept_id]
 
-    hiv_clinic_consultation_encounter_id = EncounterType.find_by_name('HIV CLINIC CONSULTATION').id
-    concept_ids = [ConceptName.find_by_name('SYMPTOM PRESENT').concept_id,
-                   ConceptName.find_by_name('DRUG INDUCED').concept_id]
+    hiv_clinic_consultation_encounter_id = EncounterType.find_by_name("HIV CLINIC CONSULTATION").id
 
-		on_art_concept_name = ConceptName.find_all_by_name('On antiretrovirals')
-
+    drug_induced_side_effect_id = ConceptName.find_by_name('DRUG INDUCED').concept_id
     @patients_alive_and_on_art ||= self.total_alive_and_on_art
     patient_ids = @patients_alive_and_on_art
 
     patient_ids = [0] if patient_ids.blank?
+    
+    side_effects_patients = Encounter.find_by_sql("SELECT e.patient_id FROM encounter e
+                                                    INNER JOIN obs o ON o.encounter_id = e.encounter_id
+                                                    WHERE e.encounter_type = #{hiv_clinic_consultation_encounter_id}
+                                                    AND e.patient_id IN (#{patient_ids.join(',')})
+                                                    AND o.value_coded IN (#{side_effect_concept_ids.join(',')})
+                                                    AND o.concept_id = #{drug_induced_side_effect_id}
+                                                    AND o.voided = 0
+                                                    AND e.encounter_datetime = (SELECT MAX(e1.encounter_datetime) FROM encounter e1
+                                                                                  WHERE e1.patient_id = e.patient_id
+                                                                                  AND e1.encounter_type = e.encounter_type  
+                                                                                  AND e1.encounter_datetime BETWEEN '#{start_date}' AND '#{end_date}'
+                                                                                  AND e1.voided = 0)
+                                                    GROUP BY e.patient_id"
+                                                    )
+                                                 
+   side_effects_patients
 
-		state = ProgramWorkflowState.find(
-			:first,
-			:conditions => ["concept_id IN (?)",
-				on_art_concept_name.map{|c|c.concept_id}]
-			).program_workflow_state_id
-
-		PatientState.find_by_sql("SELECT e1.patient_id AS patient_id,
-                              DATE(MAX(e1.encounter_datetime)) AS latest_visit_date,
-                              e1.encounter_datetime
-                              FROM encounter e1
-                                  INNER JOIN obs o
-                                      ON e1.encounter_id = o.encounter_id
-                                      AND o.concept_id IN (#{concept_ids.join(',')}) AND o.voided = 0
-                              WHERE e1.encounter_type = #{hiv_clinic_consultation_encounter_id}
-                                  AND e1.voided = 0
-                                  AND o.value_coded IN (#{side_effect_concept_ids.join(',')})
-                                  AND e1.patient_id IN (#{patient_ids.join(',')})
-                              GROUP BY e1.patient_id
-                              HAVING DATE(e1.encounter_datetime) = latest_visit_date")
-=begin
-PatientProgram.find_by_sql("SELECT patient_id FROM patient_program p
-	                        INNER JOIN patient_state s USING (patient_program_id)
-	                        WHERE p.voided = 0
-	                        AND s.voided = 0
-	                        AND program_id = #{@@program_id}
-	                        AND s.state = #{state}
-	                        AND patient_start_date(patient_id) >= '#{start_date}'
-	                        AND patient_start_date(patient_id) <= '#{end_date}'
-	                      UNKNOWN ANTIRETROVIRAL DRUG  GROUP BY patient_id ORDER BY date_enrolled")#.length rescue 0
-=end
 	end
 
   private

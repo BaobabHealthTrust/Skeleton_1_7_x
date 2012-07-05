@@ -333,10 +333,66 @@ class GenericEncountersController < ApplicationController
 
     encounter.save    
 
-
     #create observations for the just created encounter
     create_obs(encounter , params)   
 
+		if !params[:recalculate_bmi].blank? && params[:recalculate_bmi] == "true"
+				weight = 0
+				height = 0
+
+				weight_concept_id  = ConceptName.find_by_name("Weight (kg)").concept_id
+				height_concept_id  = ConceptName.find_by_name("Height (cm)").concept_id
+				bmi_concept_id = ConceptName.find_by_name("Body mass index, measured").concept_id
+				work_station_concept_id = ConceptName.find_by_name("Workstation location").concept_id
+				
+				vitals_encounter_id = EncounterType.find_by_name("VITALS").encounter_type_id
+				enc = Encounter.find(:all, :conditions => ["encounter_type = ? AND patient_id = ?
+											AND voided=0", vitals_encounter_id, @patient.id])
+
+				encounter.observations.each do |o|
+							height = o.value_text if o.concept_id == height_concept_id 
+				end
+								
+				enc.each do |e|
+						obs_created = false
+						weight = nil
+						
+						e.observations.each do |o|
+							next if o.concept_id == work_station_concept_id
+							
+							if o.concept_id == weight_concept_id
+								weight = o.value_text.to_i
+							elsif o.concept_id == height_concept_id || o.concept_id == bmi_concept_id
+								o.voided = 1
+								o.date_voided = Time.now
+								o.voided_by = encounter.creator
+								o.void_reason = "Back data entry recalculation"
+								o.save
+							end
+						end
+
+						bmi = (weight.to_f/(height.to_f*height.to_f)*10000).round(1) rescue "NaN"
+				
+						height_obs = Observation.new(
+							:concept_name => "Height (cm)",
+							:person_id => @patient.id,
+							:encounter_id => e.id,
+							:value_text => height,
+							:obs_datetime => e.encounter_datetime)
+
+						height_obs.save	
+
+						bmi_obs = Observation.new(
+							:concept_name => "Body mass index, measured",
+							:person_id => @patient.id,
+							:encounter_id => e.id,
+							:value_text => bmi,
+							:obs_datetime => e.encounter_datetime)
+
+						bmi_obs.save
+				end
+		end
+		
     # Program handling
     date_enrolled = params[:programs][0]['date_enrolled'].to_time rescue nil
     date_enrolled = session[:datetime] || Time.now() if date_enrolled.blank?
@@ -1289,7 +1345,25 @@ class GenericEncountersController < ApplicationController
       
 			extracted_value_numerics = observation[:value_numeric]
 			extracted_value_coded_or_text = observation[:value_coded_or_text]
-
+      
+      #TODO : Added this block with Yam, but it needs some testing.
+      if params[:location]
+        if encounter.encounter_type == EncounterType.find_by_name("ART ADHERENCE").id
+          if observation[:order_id].blank? && observation[:concept_name] == "AMOUNT OF DRUG BROUGHT TO CLINIC"
+            order_id = Order.find(:first,
+                                  :select => "orders.order_id",
+                                  :joins => "INNER JOIN drug_order USING (order_id)",
+                                  :conditions => ["orders.patient_id = ? AND drug_order.drug_inventory_id = ? 
+                                                  AND orders.start_date < ?", encounter.patient_id, 
+                                                  observation[:value_drug], DATE(encounter.encounter_datetime)],
+                                  :order => "orders.start_date DESC").order_id rescue nil
+            if !order_id.blank?
+              observation[:order_id] = order_id
+            end
+          end
+        end
+      end
+      
 			if observation[:value_coded_or_text_multiple] && observation[:value_coded_or_text_multiple].is_a?(Array) && !observation[:value_coded_or_text_multiple].blank?
 				values = observation.delete(:value_coded_or_text_multiple)
 				values.each do |value| 

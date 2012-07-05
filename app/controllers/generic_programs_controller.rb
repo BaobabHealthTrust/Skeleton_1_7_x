@@ -140,7 +140,8 @@ class GenericProgramsController < ApplicationController
           observation[:encounter_id] = encounter.id
           observation[:obs_datetime] = encounter.encounter_datetime || Time.now()
           observation[:person_id] ||= encounter.patient_id
-          observation[:value_text] = params[:transfer_out_location_id]
+          #observation[:value_text] = params[:transfer_out_location_id]
+          observation['value_text'] = Location.find(params[:transfer_out_location_id]).name.to_s rescue ""
           Observation.create(observation)
         end  
 

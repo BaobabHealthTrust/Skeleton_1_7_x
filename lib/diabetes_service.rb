@@ -321,7 +321,7 @@ end
     return diabetes_number
   end
   
-   def self.complications_label(patient, user_id, facility)
+   def self.complications_label(patient, user_id)
    	patient_bean = PatientService.get_patient(patient.person)
     label = ZebraPrinter::StandardLabel.new
     label.font_size = 2
@@ -336,11 +336,11 @@ end
     else
       dc_number = ""
     end
-    label.draw_multi_text("#{facility} DM CLINIC: #{patient_bean.name.to_s.titleize.delete("'")} (#{patient_bean.national_id_with_dashes}#{dc_number}) ")
+    label.draw_multi_text("QECH DM CLINIC: #{patient_bean.name.to_s.titleize.delete("'")} (#{patient_bean.national_id_with_dashes}#{dc_number}) ")
     label.draw_multi_text("Diabetes Tests (Printed on: #{Date.today.strftime('%d/%b/%Y')})", :font_reverse => true)
 
     recent_complications.map{|key, complication|
-      label.draw_multi_text("* #{complication.to_s.titleize}\t", :font_reverse => false) rescue nil if !complication.to_s.blank?
+      label.draw_multi_text("* #{complication.to_s.titleize}\t", :font_reverse => false) rescue nil
     } 
     label.print(1)
   end
