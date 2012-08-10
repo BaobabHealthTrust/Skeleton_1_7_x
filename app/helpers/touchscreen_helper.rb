@@ -143,9 +143,14 @@ module TouchscreenHelper
   def touch_hidden_tag(concept, patient, value, options={}, time=DateTime.now())
     options = {  
      :allowFreeText => false 
-    }.merge(options)      
+    }.merge(options)
     
-    kind = "value_coded_or_text"
+    if !options[:kind].blank?
+			kind = options[:kind]
+    else
+			kind = "value_coded_or_text"   
+    end
+    
     if options[:value_datetime] 
       kind = "value_datetime"
     elsif options[:multiple]
