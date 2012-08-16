@@ -203,7 +203,7 @@ class GenericPeopleController < ApplicationController
     
     if params[:person][:id] != '0' && Person.find(params[:person][:id]).dead == 1
       
-			redirect_to :controller => :patients, :action => :show, :id => params[:person]
+			redirect_to :controller => :patients, :action => :show, :id => params[:person][:id]
 		else
 			redirect_to search_complete_url(params[:person][:id], params[:relation]) and return unless params[:person][:id].blank? || params[:person][:id] == '0'
 
