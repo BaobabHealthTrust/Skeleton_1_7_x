@@ -80,6 +80,11 @@ class GenericPeopleController < ApplicationController
 				end
 			end
 			if found_person
+
+        patient = DDEService::Patient.new(found_person.patient)
+
+        patient.check_old_national_id(params[:identifier])
+
 				if params[:relation]
 					redirect_to search_complete_url(found_person.id, params[:relation]) and return
 				else

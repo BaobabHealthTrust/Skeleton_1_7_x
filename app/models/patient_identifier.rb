@@ -59,14 +59,14 @@ class PatientIdentifier < ActiveRecord::Base
 
   def self.identifier(patient_id, patient_identifier_type_id)
     patient_identifier = self.find(:first, :select => "identifier",
-                                   :conditions  =>["patient_id = ? and identifier_type = ?", patient_id, patient_identifier_type_id])
+      :conditions  =>["patient_id = ? and identifier_type = ?", patient_id, patient_identifier_type_id])
     return patient_identifier
   end
 
   def self.next_filing_number(type = 'Filing Number')
     available_numbers = self.find(:all,
-                                  :conditions => ['identifier_type = ?',
-                                  PatientIdentifierType.find_by_name(type).id]).map{ | i | i.identifier }
+      :conditions => ['identifier_type = ?',
+        PatientIdentifierType.find_by_name(type).id]).map{ | i | i.identifier }
     
     filing_number_prefix = CoreService.get_global_property_value("filing.number.prefix") rescue "FN101,FN102" 
 
@@ -82,29 +82,33 @@ class PatientIdentifier < ActiveRecord::Base
   end
 
   def after_save
-    if self.identifier_type == PatientIdentifierType.find_by_name("National ID").id
-      person = self.patient.person
-      patient_bin = PatientService.get_patient(person)
-      date_created = person.date_created.strftime('%Y-%m-%d %H:%M:%S') rescue Time.now().strftime('%Y-%m-%d %H:%M:%S')
-      first_name = patient_bin.name.split(" ")[0] rescue nil
-      last_name = patient_bin.name.split(" ")[1] rescue nil
-      birthdate_estimated = person.birthdate_estimated
+    create_from_dde_server = CoreService.get_global_property_value('create.from.dde.server').to_s == "true" rescue false
+    
+    if !create_from_dde_server
+      if self.identifier_type == PatientIdentifierType.find_by_name("National ID").id
+        person = self.patient.person
+        patient_bin = PatientService.get_patient(person)
+        date_created = person.date_created.strftime('%Y-%m-%d %H:%M:%S') rescue Time.now().strftime('%Y-%m-%d %H:%M:%S')
+        first_name = patient_bin.name.split(" ")[0] rescue nil
+        last_name = patient_bin.name.split(" ")[1] rescue nil
+        birthdate_estimated = person.birthdate_estimated
 
-      ActiveRecord::Base.connection.execute <<EOF                             
+        ActiveRecord::Base.connection.execute <<EOF
 INSERT INTO openmrs_demographx.patient (patient_id,gender,birthdate,birthdate_estimated,creator,date_created,date_changed)
 VALUES(#{patient_bin.patient_id},"#{patient_bin.sex}","#{person.birthdate}",#{birthdate_estimated},#{person.creator},'#{date_created}','#{date_created}');
 EOF
 
-      ActiveRecord::Base.connection.execute <<EOF                             
+        ActiveRecord::Base.connection.execute <<EOF
 INSERT INTO openmrs_demographx.patient_name (patient_id,given_name,family_name,creator,date_created,date_changed)
 VALUES(#{patient_bin.patient_id},"#{first_name}","#{last_name}",#{person.creator},'#{date_created}','#{date_created}');
 EOF
 
-      ActiveRecord::Base.connection.execute <<EOF                             
+        ActiveRecord::Base.connection.execute <<EOF
 INSERT INTO openmrs_demographx.patient_identifier (patient_id,identifier,identifier_type,creator,date_created)
 VALUES(#{patient_bin.patient_id},"#{patient_bin.national_id}",1,#{person.creator},'#{date_created}');
 EOF
-    end rescue nil 
+      end rescue nil
+    end
   end
 
 end
