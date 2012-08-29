@@ -1160,20 +1160,6 @@ class GenericPatientsController < ApplicationController
 
     label2 = ZebraPrinter::StandardLabel.new
     #Vertical lines
-=begin
-     label2.draw_line(45,40,5,242)
-     label2.draw_line(805,40,5,242)
-     label2.draw_line(365,40,5,242)
-     label2.draw_line(575,40,5,242)
-
-     #horizontal lines
-     label2.draw_line(45,40,795,3)
-     label2.draw_line(45,80,795,3)
-     label2.draw_line(45,120,795,3)
-     label2.draw_line(45,200,795,3)
-     label2.draw_line(45,240,795,3)
-     label2.draw_line(45,280,795,3)
-=end
     label2.draw_line(25,170,795,3)
     #label data
     label2.draw_text("STATUS AT ART INITIATION",25,30,0,3,1,1,false)
@@ -1199,10 +1185,8 @@ class GenericPatientsController < ApplicationController
     line = 190
     extra_lines = []
     label2.draw_text("STAGE DEFINING CONDITIONS",450,190,0,3,1,1,false)
-    (hiv_staging.observations).each{|obs|
-      name = obs.to_s.split(':')[0].strip.upcase rescue nil
-      condition = obs.to_s.split(':')[1].strip.humanize rescue nil
-      next unless name == 'WHO STAGES CRITERIA PRESENT'
+
+    (demographics.who_clinical_conditions.split(';') || []).each{|condition|
       line+=25
       if line <= 290
         label2.draw_text(condition[0..35],450,line,0,1,1,1,false)
@@ -1225,12 +1209,16 @@ class GenericPatientsController < ApplicationController
   end
 
   def patient_transfer_out_label(patient_id)
-    patient = Patient.find_by_patient_id(patient_id)
+    date = session[:datetime].to_date rescue Date.today
+    patient = Patient.find(patient_id)
     patient_bean = PatientService.get_patient(patient.person)
     demographics = mastercard_demographics(patient)
-    demographics_str = []
-
-		label = ZebraPrinter::Label.new(776, 329, 'T')
+    
+    who_stage = demographics.reason_for_art_eligibility 
+    initial_staging_conditions = demographics.who_clinical_conditions.split(';')
+    destination = demographics.transferred_out_to
+   
+    label = ZebraPrinter::Label.new(776, 329, 'T')
     label.line_spacing = 0
     label.top_margin = 30
     label.bottom_margin = 30
@@ -1240,139 +1228,60 @@ class GenericPatientsController < ApplicationController
     label.font_size = 3
     label.font_horizontal_multiplier = 1
     label.font_vertical_multiplier = 1
-
+   
     # 25, 30
-    # Patient personanl data
+    # Patient personanl data 
     label.draw_multi_text("#{Location.current_health_center.name} transfer out label", {:font_reverse => true})
-    label.draw_multi_text("From #{Location.current_health_center.name} to #{demographics.transferred_out_to}", {:font_reverse => false})
+    label.draw_multi_text("To #{destination}", {:font_reverse => false}) unless destination.blank?
     label.draw_multi_text("ARV number: #{demographics.arv_number}", {:font_reverse => true})
-    label.draw_multi_text("Name: #{demographics.name} (#{demographics.sex})\nAge: #{demographics.age}", {:font_reverse => false})
+    label.draw_multi_text("Name: #{demographics.name} (#{demographics.sex.first})\nAge: #{demographics.age}", {:font_reverse => false})
 
     # Print information on Diagnosis!
+    art_start_date = PatientService.date_antiretrovirals_started(patient).strftime("%d-%b-%Y") rescue nil
     label.draw_multi_text("Diagnosis", {:font_reverse => true})
-    label.draw_multi_text("Reason for starting: #{demographics.reason_for_art_eligibility}", {:font_reverse => false})
-    label.draw_multi_text("Art start date: #{demographics.art_start_date} ", {:font_reverse => false})
-    label.draw_multi_text("HIV test type: #{demographics.first_positive_hiv_test_type} ", {:font_reverse => false})
+    label.draw_multi_text("Reason for starting: #{who_stage}", {:font_reverse => false})
+    label.draw_multi_text("ART start date: #{art_start_date}",{:font_reverse => false})
     label.draw_multi_text("Other diagnosis:", {:font_reverse => true})
-
 # !!!! TODO
-		initial_staging_conditions = Encounter.find(:first,:conditions =>["encounter_type = ? and patient_id = ?",
-          EncounterType.find_by_name("HIV STAGING").encounter_type_id,patient_id]) rescue nil
-
-    staging_observations = initial_staging_conditions.observations.collect{|obs| obs.to_s if obs.value_coded == Concept.find_by_name("Yes").id}.compact rescue []
-
-		staging_conditions = ""
+    staging_conditions = ""
     count = 1
-    staging_observations.each{|condition|
-     staging_conditions+= " (#{count+=1}) " unless staging_conditions.blank?
-     staging_conditions= "(#{count}) " if staging_conditions.blank?
-     staging_conditions+=condition
+    initial_staging_conditions.each{|condition|
+     if staging_conditions.blank?
+       staging_conditions = "(#{count}) #{condition}" unless condition.blank?
+     else
+       staging_conditions+= " (#{count+=1}) #{condition}" unless condition.blank?
+     end
     }
     label.draw_multi_text("#{staging_conditions}", {:font_reverse => false})
 
-		# Print information on current status of the patient transfering out!
-    work = demographics.occupation rescue nil
-    #amb = self.observations.find_last_by_concept_name("Is able to walk unaided").to_short_s rescue nil
+    # Print information on current status of the patient transfering out!
+    init_ht = "Init HT: #{demographics.init_ht}"                    
+    init_wt = "Init WT: #{demographics.init_wt}"
 
-    first_cd4_count = Observation.find(:first, :conditions => ["concept_id = ? and person_id = ?", ConceptName.find_by_name("CD4 count").concept_id, patient_bean.person_id])
-    
-    last_cd4_count = Observation.find(:last, :conditions => ["concept_id = ? and person_id = ?", ConceptName.find_by_name("CD4 count").concept_id, patient_bean.person_id])
-    
-    last_cd4 = "Last CD4: " + last_cd4_count.obs_datetime.strftime("%d-%b-%Y") + ": " + last_cd4_count.to_s rescue nil
-    first_cd4 = "First CD4: " + first_cd4_count.obs_datetime.strftime("%d-%b-%Y") + ": " + first_cd4_count.to_s rescue nil
-
-		label.draw_multi_text("Current Status", {:font_reverse => true})
-    label.draw_multi_text("Occupation: #{work}", {:font_reverse => false})
-    label.draw_multi_text("#{first_cd4}", {:font_reverse => false})
-    label.draw_multi_text("#{last_cd4}", {:font_reverse => false})
-
-		last_dispensing_encounter_date = Encounter.find(:last, :conditions => ['encounter_type = ? AND patient_id = ?', EncounterType.find_by_name("DISPENSING").encounter_type_id, patient_id]).encounter_datetime rescue Date.today
-
-		# Print information on current treatment of the patient transfering out!
-    current_drugs = PatientService.drugs_given_on(patient, last_dispensing_encounter_date.to_date)
-    current_art_drugs = current_drugs.collect{|drug_name_quantity|drug_name_quantity.to_s} rescue nil
-    current_art_drugs = current_art_drugs.collect{|drug_name|drug_name.split(":")[0]} rescue nil
-
-    drug_names = ""
-    count = 1
-    current_art_drugs.each{|name|
-     drug_names+= " (#{count+=1}) " unless drug_names.blank?
-     drug_names= "(#{count}) " if drug_names.blank?
-     drug_names+=name
-    } rescue nil
-
-		start_date = self.date_started_art.strftime("%d-%b-%Y") rescue nil
-    label.draw_multi_text("Current art drugs", {:font_reverse => true})
-    label.draw_multi_text("#{drug_names}", {:font_reverse => false})
-    label.draw_multi_text("Transfer out date:", {:font_reverse => true})
-    label.draw_multi_text("#{demographics.transferred_out_date}", {:font_reverse => false})
-
-    return label.print(1)
-
-=begin
-    #this is the part that prints a 2D barcode
-    demographics_str << "Name: #{demographics.name}"
-    demographics_str << "DOB: #{patient_bean.birth_date}"
-    demographics_str << "DOB-E: #{patient_bean.birthdate_estimated}"
-    demographics_str << "Sex: #{demographics.sex}"
-    demographics_str << "Guardian name: #{demographics.guardian}"
-    demographics_str << "ARV number: #{demographics.arv_number}"
-    demographics_str << "National ID: #{demographics.national_id}"
-
-    demographics_str << "Address: #{demographics.address}"
-    demographics_str << "FU: #{demographics.agrees_to_followup}"
-    demographics_str << "1st alt line: #{demographics.alt_first_line_drugs.join(':')}"
-    demographics_str << "BMI: #{demographics.bmi}"
-    demographics_str << "CD4: #{demographics.cd4_count}"
-    demographics_str << "CD4 date: #{demographics.cd4_count_date}"
-    demographics_str << "1st line date: #{demographics.date_of_first_line_regimen}"
-    demographics_str << "ERA: #{demographics.ever_received_art}"
-    demographics_str << "1st line: #{demographics.first_line_drugs.join(':')}"
-    demographics_str << "1st pos HIV test date: #{demographics.first_positive_hiv_test_date}"
-
-    demographics_str << "1st pos HIV test site: #{demographics.first_positive_hiv_test_site}"
-    demographics_str << "1st pos HIV test type: #{demographics.first_positive_hiv_test_type}"
-    demographics_str << "Test date: #{demographics.hiv_test_date.gsub('/','-')}" if demographics.hiv_test_date
-    demographics_str << "Test loc: #{demographics.hiv_test_location}"
-    demographics_str << "Init HT: #{demographics.init_ht}"
-    demographics_str << "Init WT: #{demographics.init_wt}"
-    demographics_str << "Landmark: #{demographics.landmark}"
-    demographics_str << "Occupation: #{demographics.occupation}"
-    demographics_str << "Preg: #{demographics.pregnant}" if patient.person.gender == 'F'
-    demographics_str << "SR: #{demographics.reason_for_art_eligibility}"
-    demographics_str << "2nd line: #{demographics.second_line_drugs}"
-    demographics_str << "TB status: #{demographics.tb_status_at_initiation}"
-    demographics_str << "TI: #{demographics.transfer_in}"
-    demographics_str << "TI date: #{demographics.transfer_in_date}"
-
-
-    visits = visits(patient) ; count = 0 ; visit_str = nil
-    (visits || {}).sort{|a,b| b[0].to_date<=>a[0].to_date}.each do | date,visit |
-      break if count > 3
-      visit_str = "Visit date: #{date}" if visit_str.blank?
-      visit_str += ";Visit date: #{date}" unless visit_str.blank?
-      visit_str += ";wt: #{visit.weight}" if visit.weight
-      visit_str += ";ht: #{visit.height}" if visit.height
-      visit_str += ";bmi: #{visit.bmi}" if visit.bmi
-      visit_str += ";Outcome: #{visit.outcome}" if visit.outcome
-      visit_str += ";Regimen: #{visit.reg}" if visit.reg
-      visit_str += ";Adh: #{visit.adherence.join(' ')}" if visit.adherence
-      visit_str += ";TB status: #{visit.tb_status}" if visit.tb_status
-      gave = nil
-      (visit.gave.uniq || []).each do | name , quantity |
-        gave += "  #{name} (#{quantity})" unless gave.blank?
-        gave = ";Gave: #{name} (#{quantity})" if gave.blank?
-      end rescue []
-      visit_str += gave unless gave.blank?
-      count+=1
-      demographics_str << visit_str
+    first_cd4_count = "CD count " + demographics.cd4_count if demographics.cd4_count
+    unless demographics.cd4_count_date.blank?
+      first_cd4_count_date = "CD count date #{demographics.cd4_count_date.strftime('%d-%b-%Y')}"
+    end
+    label.draw_multi_text("Current Status", {:font_reverse => true})
+    label.draw_multi_text("#{init_ht} #{init_wt}", {:font_reverse => false})
+    label.draw_multi_text("#{first_cd4_count}", {:font_reverse => false})
+    label.draw_multi_text("#{first_cd4_count_date}", {:font_reverse => false})
+ 
+    # Print information on current treatment of the patient transfering out!
+    demographics.reg = []
+    PatientService.drug_given_before(patient, (date.to_date) + 1.day).uniq.each do |order|
+      next unless MedicationService.arv(order.drug_order.drug)
+      demographics.reg << order.drug_order.drug.concept.shortname
     end
 
-    label = ZebraPrinter::StandardLabel.new
-    label.draw_2D_barcode(80,20,'P',700,600,'x2','y7','l100','r100','f0','s5',"#{demographics_str.join(',').gsub('/','')}")
+    label.draw_multi_text("Current ART drugs", {:font_reverse => true})
+    label.draw_multi_text("#{demographics.reg}", {:font_reverse => false})
+    label.draw_multi_text("Transfer out date:", {:font_reverse => true})
+    label.draw_multi_text("#{date.strftime("%d-%b-%Y")}", {:font_reverse => false})
+
     label.print(1)
-=end
-  end
+  end 
+
 
   def patient_lab_orders_label(patient_id)
     patient = Patient.find(patient_id)
@@ -1494,7 +1403,7 @@ class GenericPatientsController < ApplicationController
 		visits.transferred_out_to = transferred_out_details.value_text if transferred_out_details 
 		visits.transferred_out_date = transferred_out_details.obs_datetime if transferred_out_details
 
-		visits.art_start_date = PatientService.patient_art_start_date(patient_bean.patient_id).strftime("%d-%B-%Y")
+		visits.art_start_date = PatientService.patient_art_start_date(patient_bean.patient_id).strftime("%d-%B-%Y") rescue nil
 
     visits.transfer_in_date = patient_obj.person.observations.recent(1).question("HAS TRANSFER LETTER").all.collect{|o|
             o.obs_datetime if o.answer_string.strip == "YES"}.last rescue nil
@@ -1533,7 +1442,7 @@ class GenericPatientsController < ApplicationController
       treatment_encounter.observations.map{|obs|
         next if not obs.concept_id == amount_dispensed_concept_id
         drug = Drug.find(obs.value_drug) if obs.value_numeric > 0
-		next if obs.value_numeric <= 0
+        next if obs.value_numeric <= 0
         drug_concept_id = drug.concept.concept_id
         regimens.map do | regimen_type , concept_ids |
           if regimen_type == 'FIRST LINE ANTIRETROVIRAL REGIMEN' and concept_ids.include?(drug_concept_id)
@@ -1554,8 +1463,10 @@ class GenericPatientsController < ApplicationController
     end
 
     ans = ["Extrapulmonary tuberculosis (EPTB)","Pulmonary tuberculosis within the last 2 years","Pulmonary tuberculosis","Kaposis sarcoma"]
-    staging_ans = patient_obj.person.observations.recent(1).question("WHO STG CRIT").all
-
+    staging_ans = patient_obj.person.observations.recent(1).question("WHO STAGES CRITERIA PRESENT").all
+    if staging_ans.blank?
+      staging_ans = patient_obj.person.observations.recent(1).question("WHO STG CRIT").all
+    end
     visits.ks = 'Yes' if staging_ans.map{|obs|ConceptName.find(obs.value_coded_name_id).name}.include?(ans[3])
     visits.tb_within_last_two_yrs = 'Yes' if staging_ans.map{|obs|ConceptName.find(obs.value_coded_name_id).name}.include?(ans[1])
     visits.eptb = 'Yes' if staging_ans.map{|obs|ConceptName.find(obs.value_coded_name_id).name}.include?(ans[0])
@@ -1565,34 +1476,39 @@ class GenericPatientsController < ApplicationController
         EncounterType.find_by_name("HIV Staging").id,patient_obj.id])
 
     visits.who_clinical_conditions = ""
-
     (hiv_staging.observations).collect do |obs|
-      name = obs.to_s.split(':')[0].strip rescue nil
-      next unless name == 'WHO STAGES CRITERIA PRESENT'
-      condition = obs.to_s.split(':')[1].strip.humanize rescue nil
-      visits.who_clinical_conditions = visits.who_clinical_conditions + (condition) + "; "
+      if CoreService.get_global_property_value('use.extended.staging.questions').to_s == 'true'
+        name = obs.to_s.split(':')[0].strip rescue nil
+        ans = obs.to_s.split(':')[1].strip rescue nil
+        next unless ans.upcase == 'YES'
+        visits.who_clinical_conditions = visits.who_clinical_conditions + (name) + "; "
+      else
+        name = obs.to_s.split(':')[0].strip rescue nil
+        next unless name == 'WHO STAGES CRITERIA PRESENT'
+        condition = obs.to_s.split(':')[1].strip.humanize rescue nil
+        visits.who_clinical_conditions = visits.who_clinical_conditions + (condition) + "; "
+      end
     end rescue []
-
-    # cd4_count_date cd4_count pregnant who_clinical_conditions
 
     visits.cd4_count_date = nil ; visits.cd4_count = nil ; visits.pregnant = 'N/A'
 
     (hiv_staging.observations).map do | obs |
       concept_name = obs.to_s.split(':')[0].strip rescue nil
       next if concept_name.blank?
-      case concept_name
-      when 'Cd4 count datetime'
-        visits.cd4_count_date = obs.value_datetime.to_date
-      when 'CD4 count'
-        visits.cd4_count = obs.value_numeric.to_i
-      when 'IS PATIENT PREGNANT?'
-        visits.pregnant = obs.to_s.split(':')[1] rescue nil
-      when 'LYMPHOCYTE COUNT'
-        visits.tlc = obs.answer_string
-      when 'LYMPHOCYTE COUNT DATETIME'
-        visits.tlc_date = obs.value_datetime.to_date
+      case concept_name.downcase
+        when 'cd4 count datetime'
+          visits.cd4_count_date = obs.value_datetime.to_date
+        when 'cd4 count'
+          visits.cd4_count = "#{obs.value_modifier}#{obs.value_numeric.to_i}"
+        when 'is patient pregnant?'
+          visits.pregnant = obs.to_s.split(':')[1] rescue nil
+        when 'lymphocyte count'
+          visits.tlc = obs.answer_string
+        when 'lymphocyte count date'
+          visits.tlc_date = obs.value_datetime.to_date
       end
     end rescue []
+
     visits.tb_status_at_initiation = (!visits.tb_status.nil? ? "Curr" :
           (!visits.tb_within_last_two_yrs.nil? ? (visits.tb_within_last_two_yrs.upcase == "YES" ? 
               "Last 2yrs" : "Never/ >2yrs") : "Never/ >2yrs"))
@@ -1624,7 +1540,7 @@ class GenericPatientsController < ApplicationController
     visits
   end
 
-  def visits(patient_obj,encounter_date = nil)
+  def visits(patient_obj, encounter_date = nil)
     patient_visits = {}
     yes = ConceptName.find_by_name("YES")
     if encounter_date.blank?
@@ -1701,8 +1617,9 @@ class GenericPatientsController < ApplicationController
             end
           when "REGIMEN"
             concept_name = obs.concept.fullname rescue []
-            next unless concept_name.upcase == 'WHAT TYPE OF ANTIRETROVIRAL REGIMEN' 
-            patient_visits[visit_date].reg =  Concept.find_by_concept_id(obs.value_coded).concept_names.typed("SHORT").first.name
+            next unless concept_name.upcase == 'ARV REGIMENS RECEIVED ABSTRACTED CONSTRUCT'
+			patient_visits[visit_date].reg = 'Unknown' if obs.value_coded == ConceptName.find_by_name("Unknown antiretroviral drug").concept_id 
+            patient_visits[visit_date].reg =  Concept.find_by_concept_id(obs.value_coded).concept_names.typed("SHORT").first.name if !patient_visits[visit_date].reg  
           when "SYMPTOMS"
             concept_name = obs.concept.fullname rescue []
             next unless concept_name.upcase == 'SYMPTOM PRESENT' 
@@ -1731,6 +1648,7 @@ class GenericPatientsController < ApplicationController
             patient_visits[visit_date].notes = obs.value_text if patient_visits[visit_date].notes.blank?
          end
       end
+
     end
 
     #patients currents/available states (patients outcome/s)
@@ -2669,6 +2587,29 @@ class GenericPatientsController < ApplicationController
     count = count.values unless count.blank?
     count = '0' if count.blank?
     render :text => "Next appointment: #{date.strftime('%d %B %Y')} (#{count})"
-  end 
+  end
+  
+  def merge
+    old_patient_id = params[:old_id]
+    new_patient_id = params[:new_id]
+    
+    old_patient = Patient.find old_patient_id
+    new_patient = Patient.find new_patient_id
+    
+    raise "Old patient does not exist" unless old_patient
+    raise "New patient does not exist" unless new_patient
+    
+    PatientService.merge_patients(old_patient, new_patient)
+    
+    # void patient
+    patient = old_patient.person
+    patient.void("Merged with patient #{new_patient_id}")
+    
+    # void person
+    person = old_patient.person
+    person.void("Merged with person #{new_patient_id}")
+    
+    render :text => 'Done'
+  end
 
 end
