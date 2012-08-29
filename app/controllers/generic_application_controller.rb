@@ -25,15 +25,20 @@ class GenericApplicationController < ActionController::Base
 	helper_method :next_task
 	filter_parameter_logging :password
 	before_filter :authenticate_user!, :except => ['login', 'logout','remote_demographics',
-		                                      'create_remote', 'mastercard_printable', 'get_token']
+		                                      'create_remote', 'mastercard_printable', 'get_token',
+		                                      'cohort']
 
     before_filter :set_current_user, :except => ['login', 'logout','remote_demographics',
-		                                      'create_remote', 'mastercard_printable', 'get_token']
+		                                      'create_remote', 'mastercard_printable', 'get_token',
+                                          'cohort']
 
 	before_filter :location_required, :except => ['login', 'logout', 'location',
 		                                        'demographics','create_remote',
 		                                         'mastercard_printable',
-		                                        'remote_demographics', 'get_token', 'single_sign_in']
+		                                        'remote_demographics', 'get_token',
+                                            'cohort']
+
+	before_filter :set_return_uri
   
 	def rescue_action_in_public(exception)
 		@message = exception.message
@@ -164,16 +169,27 @@ class GenericApplicationController < ActionController::Base
     end
   end
 
-    def location_required
-      if not located? and params[:location]
-        location = Location.find(params[:location]) rescue nil
-        self.current_location = location if location
-      end
-      located? || location_denied
-    end
+	def location_required
+		if not located? and params[:location]
+			location = Location.find(params[:location]) rescue nil
+			self.current_location = location if location
+		end
+
+		if not located? and session[:sso_location]
+			location = Location.find(session[:sso_location]) rescue nil
+			self.current_location = location if location
+		end
+
+		located? || location_denied
+	end
+
+	def set_return_uri
+		if params[:return_uri]
+			session[:return_uri] = params[:return_uri]
+		end
+	end
 
     def located?
-      
       self.current_location
     end
 
