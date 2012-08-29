@@ -1109,7 +1109,7 @@ EOF
     people = []
     people = search_by_identifier(params[:identifier]) if params[:identifier]
     return people.first.id unless people.blank? || people.size > 1
-    people = Person.find(:all, :include => [{:names => [:person_name_code]}, :patient], :conditions => [
+    people = Person.find(:all, :limit => 15,:include => [{:names => [:person_name_code]}, :patient], :conditions => [
         "gender = ? AND \
      person_name.given_name = ? AND \
      person_name.family_name = ?",
