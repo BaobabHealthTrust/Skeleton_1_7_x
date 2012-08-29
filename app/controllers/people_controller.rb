@@ -1,5 +1,0 @@
-class PeopleController < GenericPeopleController
-    
-
-end
- 

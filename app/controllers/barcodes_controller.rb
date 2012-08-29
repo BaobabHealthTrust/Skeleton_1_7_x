@@ -1,3 +1,0 @@
-class BarcodesController < GenericBarcodesController
-
-end

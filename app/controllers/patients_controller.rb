@@ -1,3 +1,0 @@
-class PatientsController < GenericPatientsController
-
-end

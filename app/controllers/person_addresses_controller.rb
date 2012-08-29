@@ -1,3 +1,0 @@
-class PersonAddressesController < GenericPersonAddressesController
-
-end

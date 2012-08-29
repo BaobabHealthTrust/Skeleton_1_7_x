@@ -1,3 +1,0 @@
-class AdminController < GenericAdminController
-
-end

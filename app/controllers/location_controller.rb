@@ -1,3 +1,0 @@
-class LocationController < GenericLocationController
-
-end

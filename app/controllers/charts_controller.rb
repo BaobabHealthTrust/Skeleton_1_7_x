@@ -1,2 +1,0 @@
-class ChartsController < GenericChartsController
-end

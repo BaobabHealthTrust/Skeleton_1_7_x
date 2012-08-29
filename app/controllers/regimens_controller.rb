@@ -1,3 +1,0 @@
-class RegimensController < GenericRegimensController
-
-end
