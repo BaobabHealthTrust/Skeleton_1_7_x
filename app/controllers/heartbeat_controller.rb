@@ -1,2 +1,0 @@
-class HeartbeatController < GenericHeartbeatController
-end

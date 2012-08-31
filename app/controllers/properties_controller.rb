@@ -1,3 +1,0 @@
-class PropertiesController < GenericPropertiesController
-
-end

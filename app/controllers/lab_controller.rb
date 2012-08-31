@@ -1,2 +1,0 @@
-class LabController < GenericLabController
-end

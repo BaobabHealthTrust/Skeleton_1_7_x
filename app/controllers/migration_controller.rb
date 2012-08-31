@@ -1,3 +1,0 @@
-class MigrationController < GenericMigrationController
- 
-end

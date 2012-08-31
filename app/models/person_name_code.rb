@@ -29,6 +29,7 @@ class PersonNameCode < ActiveRecord::Base
   #       LENGTH(#{field_name}_code) - LENGTH(?) ASC,
   #   - Popularity of the search text
   #   - Search text alphabetized
+=begin
   def self.find_most_common(field_name, search_string)
     soundex = (search_string || '').soundex
     self.find_by_sql([
@@ -46,5 +47,34 @@ class PersonNameCode < ActiveRecord::Base
          #{field_name} ASC \
        LIMIT 10",
        "#{soundex}%", search_string, search_string, soundex, soundex, soundex])
+  end
+=end
+
+
+  def self.find_most_common(field_name, search_string)
+    soundex = (search_string || '').soundex
+    self.find_by_sql([
+      "SELECT DISTINCT #{field_name} AS #{field_name}, person_name.person_name_id AS id
+       FROM person_name_code \
+       INNER JOIN person_name ON person_name_code.person_name_id = person_name.person_name_id \
+       WHERE  person_name.voided = 0 AND #{field_name}_code LIKE ? \
+       GROUP BY #{field_name} \
+       ORDER BY \
+        CASE INSTR(#{field_name},?) WHEN 0 THEN 9999 ELSE INSTR(#{field_name},?) END ASC \
+       LIMIT 10",
+       "#{soundex}%", search_string, search_string])
+  end
+
+  def self.find_top_ten(field_name)
+    self.find_by_sql([
+      "SELECT DISTINCT #{field_name} AS #{field_name}, person_name.person_name_id AS id
+       FROM person_name_code \
+       INNER JOIN person_name ON person_name_code.person_name_id = person_name.person_name_id \
+       INNER JOIN person ON person.person_id = person_name.person_id \
+       WHERE person.voided = 0 AND person_name.voided = 0 \
+       GROUP BY #{field_name} \
+       ORDER BY \
+         #{field_name} ASC \
+       LIMIT 10"])
   end
 end

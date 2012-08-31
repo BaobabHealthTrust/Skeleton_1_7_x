@@ -1,3 +1,0 @@
-class SingleSignOnController < GenericSingleSignOnController
-
-end

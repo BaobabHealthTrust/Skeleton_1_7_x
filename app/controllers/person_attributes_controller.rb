@@ -1,3 +1,0 @@
-class PersonAttributesController < GenericPersonAttributesController
-
-end

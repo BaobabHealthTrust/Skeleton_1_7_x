@@ -80,11 +80,6 @@ class GenericPeopleController < ApplicationController
 				end
 			end
 			if found_person
-
-        patient = DDEService::Patient.new(found_person.patient)
-
-        patient.check_old_national_id(params[:identifier])
-
 				if params[:relation]
 					redirect_to search_complete_url(found_person.id, params[:relation]) and return
 				else
@@ -101,7 +96,7 @@ class GenericPeopleController < ApplicationController
 		end
 
 	end
-  
+
   def search_from_dde
 		found_person = PatientService.person_search_from_dde(params)
     if found_person
@@ -125,16 +120,16 @@ class GenericPeopleController < ApplicationController
 		@found_person_id = params[:found_person_id] 
 		@relation = params[:relation]
 		@person = Person.find(@found_person_id) rescue nil
-    @current_hiv_program_state = PatientProgram.find(:first, :joins => :location, :conditions => ["program_id = ? AND patient_id = ? AND location.location_id = ?", Program.find_by_concept_id(Concept.find_by_name('HIV PROGRAM').id).id,@person.patient, Location.current_health_center]).patient_states.last.program_workflow_state.concept.fullname rescue ''
-    @transferred_out = @current_hiv_program_state.upcase == "PATIENT TRANSFERRED OUT"? true : nil
-    defaulter = Patient.find_by_sql("SELECT current_defaulter(#{@person.patient.patient_id}, '#{session_date}') 
+		@current_hiv_program_state = PatientProgram.find(:first, :joins => :location, :conditions => ["program_id = ? AND patient_id = ? AND location.location_id = ?", Program.find_by_concept_id(Concept.find_by_name('HIV PROGRAM').id).id,@person.patient, 				Location.current_health_center]).patient_states.last.program_workflow_state.concept.fullname rescue ''
+    	@transferred_out = @current_hiv_program_state.upcase == "PATIENT TRANSFERRED OUT"? true : nil
+		defaulter = Patient.find_by_sql("SELECT current_defaulter(#{@person.patient.patient_id}, '#{session_date}') 
                                      AS defaulter 
-                                     FROM patient_program LIMIT 1")[0].defaulter
-    @defaulted = defaulter == 0 ? nil : true     
-    @task = main_next_task(Location.current_location, @person.patient, session_date.to_date)
+                                     FROM patient_program LIMIT 1")[0].defaulter rescue 0
+    	@defaulted = "#{defaulter}" == "0" ? nil : true     
+    	@task = next_task(@person.patient)
 		@arv_number = PatientService.get_patient_identifier(@person, 'ARV Number')
 		@patient_bean = PatientService.get_patient(@person)                                                             
-    render :layout => false	
+    	render :layout => false	
 	end
 
 	def tranfer_patient_in
@@ -335,7 +330,7 @@ class GenericPeopleController < ApplicationController
     render :text => traditional_authorities.join('') + "<li value='Other'>Other</li>" and return
   end
 
-	# Regions containing the string given in params[:value]
+  # Regions containing the string given in params[:value]
   def region_of_origin
     region_conditions = ["name LIKE (?)", "#{params[:value]}%"]
 
@@ -358,7 +353,7 @@ class GenericPeopleController < ApplicationController
     render :text => regions.join('')  and return
   end
 
-    # Districts containing the string given in params[:value]
+  # Districts containing the string given in params[:value]
   def district
     region_id = Region.find_by_name("#{params[:filter_value]}").id
     region_conditions = ["name LIKE (?) AND region_id = ? ", "#{params[:search_string]}%", region_id]
@@ -487,7 +482,6 @@ class GenericPeopleController < ApplicationController
       last_encounter_date = patient.encounters.find(:first, 
         :order => 'encounter_datetime DESC',
         :conditions => ['encounter_type IN (?)',clinic_encounter_ids]).encounter_datetime.strftime("%d-%b-%Y") rescue 'Uknown'
-      
 
       art_start_date = patient.art_start_date.strftime("%d-%b-%Y") rescue 'Uknown'
       last_given_drugs = patient.person.observations.recent(1).question("ARV REGIMENS RECEIVED ABSTRACTED CONSTRUCT").last rescue nil

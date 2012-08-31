@@ -1,2 +1,0 @@
-class RelationshipsController < GenericRelationshipsController
-end
