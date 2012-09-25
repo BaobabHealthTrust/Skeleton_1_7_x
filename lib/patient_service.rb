@@ -80,14 +80,14 @@ module PatientService
       @dde_server_password = GlobalProperty.find_by_property("dde_server_password").property_value rescue ""
     
       uri = "http://#{@dde_server_username}:#{@dde_server_password}@#{@dde_server}/people.json/"                          
-      recieved_params = RestClient.post(uri,passed_params)      
+      received_params = RestClient.post(uri,passed_params)
                                           
-      national_id = JSON.parse(recieved_params)["npid"]["value"]
+      national_id = JSON.parse(received_params)["npid"]["value"]
     else
       national_id = params["person"]["patient"]["identifiers"]["National_id"]
     end
       
-	  person = self.create_from_form(params[:person])
+	  person = self.create_from_form(params[:person] || params["person"])
     identifier_type = PatientIdentifierType.find_by_name("National id") || PatientIdentifierType.find_by_name("Unknown id")
     person.patient.patient_identifiers.create("identifier" => national_id, 
       "identifier_type" => identifier_type.patient_identifier_type_id) unless national_id.blank?
@@ -254,39 +254,28 @@ module PatientService
     }
 
 
-    servers = GlobalProperty.find(:first, :conditions => {:property => "remote_servers.parent"}).property_value.split(/,/) rescue nil
-
+    servers = GlobalProperty.find(:first,
+      :conditions => {:property => "remote_servers.parent"}).property_value.split(/,/) rescue nil
     server_address_and_port = servers.to_s.split(':')
-
     server_address = server_address_and_port.first
     server_port = server_address_and_port.second
+    login = GlobalProperty.find(:first,
+      :conditions => {:property => "remote_bart.username"}).property_value.split(/,/) rescue ''
+    password = GlobalProperty.find(:first,
+      :conditions => {:property => "remote_bart.password"}).property_value.split(/,/) rescue ''
 
-    return nil if servers.blank?
-
-    wget_base_command = "wget --quiet --load-cookies=cookie.txt --quiet --cookies=on --keep-session-cookies --save-cookies=cookie.txt"
-
-    login = GlobalProperty.find(:first, :conditions => {:property => "remote_bart.username"}).property_value.split(/,/) rescue ''
-    password = GlobalProperty.find(:first, :conditions => {:property => "remote_bart.password"}).property_value.split(/,/) rescue ''
-    location = GlobalProperty.find(:first, :conditions => {:property => "remote_bart.location"}).property_value.split(/,/) rescue nil
-    machine = GlobalProperty.find(:first, :conditions => {:property => "remote_machine.account_name"}).property_value.split(/,/) rescue ''
-    post_data = known_demographics
-    post_data["_method"]="put"
-
-    local_demographic_lookup_steps = [ 
-      "#{wget_base_command} -O /dev/null --post-data=\"login=#{login}&password=#{password}\" \"http://localhost/session\"",
-      "#{wget_base_command} -O /dev/null --post-data=\"_method=put&location=#{location}\" \"http://localhost/session\"",
-      "#{wget_base_command} -O - --post-data=\"#{post_data.to_param}\" \"http://localhost/patient/create_remote\""
-    ]
+    if server_port.blank?
+      uri = "http://#{login.first}:#{password.first}@#{server_address}/people/create_remote"
+    else
+      uri = "http://#{login.first}:#{password.first}@#{server_address}:#{server_port}/people/create_remote"
+    end
+    output = RestClient.post(uri,known_demographics)
 
     results = []
-    servers.each{|server|
-      command = "ssh #{machine}@#{server_address} '#{local_demographic_lookup_steps.join(";\n")}'"
-      output = `#{command}`
-      results.push output if output and output.match(/person/)
-    }
-    result = results.sort{|a,b|b.length <=> a.length}.first
-
+    results.push output if output and output.match(/person/)
+    result = results.sort{|a,b|b.length <=> a.length}.first          
     result ? person = JSON.parse(result) : nil
+    
     begin
       person["person"]["addresses"]["address1"] = "#{new_params[:addresses][:address1]}"
       person["person"]["names"]["middle_name"] = "#{new_params[:names][:middle_name]}"
@@ -306,9 +295,7 @@ module PatientService
   def self.find_remote_person(known_demographics)
 
     servers = GlobalProperty.find(:first, :conditions => {:property => "remote_servers.parent"}).property_value.split(/,/) rescue nil
-
     server_address_and_port = servers.to_s.split(':')
-
     server_address = server_address_and_port.first
     server_port = server_address_and_port.second
 
