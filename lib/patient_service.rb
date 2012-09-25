@@ -328,24 +328,21 @@ module PatientService
     post_data = known_demographics
     post_data["_method"]="put"
 
-    local_demographic_lookup_steps = [ 
-      "#{wget_base_command} -O /dev/null --post-data=\"login=#{login}&password=#{password}\" \"http://localhost/session\"",
-      "#{wget_base_command} -O /dev/null --post-data=\"_method=put&location=#{location}\" \"http://localhost/session\"",
-      "#{wget_base_command} -O - --post-data=\"#{post_data.to_param}\" \"http://localhost/people/demographics\""
-    ]
+    if server_port.blank?
+      uri = "http://#{login.first}:#{password.first}@#{server_address}/people/demographics_remote"                          
+    else
+      uri = "http://#{login.first}:#{password.first}@#{server_address}:#{server_port}/people/demographics_remote"                          
+    end
+
+    output = RestClient.post(uri,known_demographics)      
 
     results = []
-    servers.each{|server|
-      command = "ssh #{machine}@#{server_address} '#{local_demographic_lookup_steps.join(";\n")}'"
-      output = `#{command}`
-      results.push output if output and output.match /person/
-    }
-    # TODO need better logic here to select the best result or merge them
-    # Currently returning the longest result - assuming that it has the most information
-    # Can't return multiple results because there will be redundant data from sites
+    results.push output if output and output.match /person/
     result = results.sort{|a,b|b.length <=> a.length}.first
     result ? person = JSON.parse(result) : nil
-    #Stupid hack to structure the hash for openmrs 1.7
+
+    return {} if person.blank?
+
     person["person"]["occupation"] = person["person"]["attributes"]["occupation"]
     person["person"]["cell_phone_number"] = person["person"]["attributes"]["cell_phone_number"]
     person["person"]["home_phone_number"] =  person["person"]["attributes"]["home_phone_number"]
@@ -359,7 +356,7 @@ module PatientService
   end
   
   def self.find_remote_person_by_identifier(identifier)
-    known_demographics = {:person => {:patient => { :identifiers => {"National id" => identifier }}}}
+    known_demographics = {:person => {:patient => { :identifiers => {"national_id" => identifier }}}}
     find_remote_person(known_demographics)
   end
   
@@ -405,21 +402,21 @@ module PatientService
     end
 
   end
-  
+
   def self.services(current_user_id, session_date)
   	services_concept_id = ConceptName.find_by_name('SERVICES').concept_id
 
     @start_date = session_date.to_date
     @end_date = session_date.to_date
-		
-    registration_services_hash = {} ; services = []
-    registration_services_hash['SERVICES'] = {'Casualty' => 0,'Dental' => 0,'Eye' => 0,'Family Planing' => 0,'Medical' => 0,'OB/Gyn' => 0,'Orthopedics' => 0,'Other' => 0,'Pediatrics' => 0,'Skin' => 0,'STI Clinic' => 0,'Surgical' => 0} 
 
-    
+    registration_services_hash = {} ; services = []
+    registration_services_hash['SERVICES'] = {'Casualty' => 0,'Dental' => 0,'Eye' => 0,'Family Planing' => 0,'Medical' => 0,'OB/Gyn' => 0,'Orthopedics' => 0,'Other' => 0,'Pediatrics' => 0,'Skin' => 0,'STI Clinic' => 0,'Surgical' => 0}
+
+
     #services = Observation.find(:all, :conditions => ["DATE(obs_datetime) = ? AND concept_id = ?", Date.today.to_date, ConceptName.find_by_name("SERVICES").concept_id], :order => "obs_datetime desc")
-    
+
     services = Observation.find(:all, :conditions => ["DATE(obs_datetime) = ? AND concept_id = ? AND creator = ?", session_date.to_date, ConceptName.find_by_name("SERVICES").concept_id, current_user_id], :order => "obs_datetime desc")#.uniq.reverse.first(5) rescue []
-    
+
     ( services || [] ).each do | service |
 				  if service.value_text.capitalize == 'Casualty'
 				    registration_services_hash['SERVICES']['Casualty'] += 1
@@ -450,18 +447,18 @@ module PatientService
 
   	return services
   end
-  
+
     def self.all_services(session_date)
   	services_concept_id = ConceptName.find_by_name('SERVICES').concept_id
 
     @start_date = session_date.to_date
     @end_date = session_date.to_date
-		
+
     registration_services_hash = {} ; services = []
-    registration_services_hash['SERVICES'] = {'Casualty' => 0,'Dental' => 0,'Eye' => 0,'Family Planing' => 0,'Medical' => 0,'OB/Gyn' => 0,'Orthopedics' => 0,'Other' => 0,'Pediatrics' => 0,'Skin' => 0,'STI Clinic' => 0,'Surgical' => 0} 
-    
+    registration_services_hash['SERVICES'] = {'Casualty' => 0,'Dental' => 0,'Eye' => 0,'Family Planing' => 0,'Medical' => 0,'OB/Gyn' => 0,'Orthopedics' => 0,'Other' => 0,'Pediatrics' => 0,'Skin' => 0,'STI Clinic' => 0,'Surgical' => 0}
+
     services = Observation.find(:all, :conditions => ["DATE(date_created) = ? AND concept_id = ?", Date.today.to_date, ConceptName.find_by_name("SERVICES").concept_id], :order => "obs_datetime desc")
-    
+
     ( services || [] ).each do | service |
 				  if service.value_text.capitalize == 'Casualty'
 				    registration_services_hash['SERVICES']['Casualty'] += 1
@@ -492,11 +489,12 @@ module PatientService
 
   	return services
   end
-  
+
   def self.all_patient_services
-  	services = Observation.find(:all, :conditions => ["DATE(date_created) = ? AND concept_id = ?", Date.today.to_date, ConceptName.find_by_name("SERVICES").concept_id], :order => "obs_datetime desc") 
+  	services = Observation.find(:all, :conditions => ["DATE(date_created) = ? AND concept_id = ?", Date.today.to_date, ConceptName.find_by_name("SERVICES").concept_id], :order => "obs_datetime desc")
   end
-  
+
+
   def self.patient_national_id_label(patient)
 	  patient_bean = get_patient(patient.person)
     return unless patient_bean.national_id
@@ -510,7 +508,7 @@ module PatientService
     label.draw_barcode(50,180,0,1,5,15,120,false,"#{patient_bean.national_id}")
     label.draw_multi_text("#{patient_bean.name.titleize}")
     label.draw_multi_text("#{patient_bean.national_id_with_dashes} #{patient_bean.birth_date}#{sex}")
-    label.draw_multi_text("#{patient_bean.state_province} , #{patient_bean.current_residence}" )
+    label.draw_multi_text("#{patient_bean.address}")
     label.print(1)
   end
 
@@ -549,12 +547,6 @@ module PatientService
     hiv_test_date = self.hiv_test_date(patient_id)
     months = (today.year * 12 + today.month) - (hiv_test_date.year * 12 + hiv_test_date.month) rescue nil
     return months
-  end
-
-  def self.occupations
-    ['','Driver','Housewife','Messenger','Business','Farmer','Salesperson','Teacher',
-     'Student','Security guard','Domestic worker', 'Police','Office worker',
-     'Preschool child','Mechanic','Prisoner','Craftsman','Healthcare Worker','Soldier'].sort.concat(["Other","Unknown"])
   end
 
   def self.patient_hiv_status(patient)
@@ -851,41 +843,39 @@ EOF
         :order =>"obs_datetime")
   end
 
-  
-  def self.get_patient(person)
-    patient = PatientBean.new('')
-    patient.person_id = person.id
-    patient.patient_id = person.patient.id
-    patient.arv_number = get_patient_identifier(person.patient, 'ARV Number')
-    patient.address = person.addresses.first.address1
-    patient.state_province = person.addresses.first.state_province
-    patient.national_id = get_patient_identifier(person.patient, 'National id')    
-	  patient.national_id_with_dashes = get_national_id_with_dashes(person.patient)
-    patient.name = person.names.first.given_name + ' ' + person.names.first.family_name rescue nil
-    patient.first_name = person.names.first.given_name
-    patient.last_name = person.names.first.family_name
-    patient.sex = sex(person)
-    patient.age = age(person)
-    patient.age_in_months = age_in_months(person)
-    patient.dead = person.dead
-    patient.birth_date = birthdate_formatted(person)
-    patient.birthdate_estimated = person.birthdate_estimated
-    patient.home_district = person.addresses.first.address2
-    patient.traditional_authority = person.addresses.first.county_district
-    patient.current_residence = person.addresses.first.city_village
-    patient.landmark = person.addresses.first.address1
-    patient.mothers_surname = person.names.first.family_name2
-    patient.eid_number = get_patient_identifier(person.patient, 'EID Number') rescue nil
-    patient.pre_art_number = get_patient_identifier(person.patient, 'Pre ART Number (Old format)') rescue nil
-    patient.archived_filing_number = get_patient_identifier(person.patient, 'Archived filing number')rescue nil
-    patient.filing_number = get_patient_identifier(person.patient, 'Filing Number')
-    patient.occupation = get_attribute(person, 'Occupation')
-    patient.cell_phone_number = get_attribute(person, 'Cell phone number')
-    patient.office_phone_number = get_attribute(person, 'Office phone number')
-    patient.home_phone_number = get_attribute(person, 'Home phone number')
-    patient.guardian = art_guardian(person.patient) rescue nil 
-    patient
-  end
+	def self.get_patient(person, current_date = Date.today)
+		patient = PatientBean.new('')
+		patient.person_id = person.id
+		patient.patient_id = person.patient.id
+		patient.arv_number = get_patient_identifier(person.patient, 'ARV Number')
+		patient.address = person.addresses.first.city_village
+		patient.national_id = get_patient_identifier(person.patient, 'National id')    
+		patient.national_id_with_dashes = get_national_id_with_dashes(person.patient)
+		patient.name = person.names.first.given_name + ' ' + person.names.first.family_name rescue nil
+		patient.first_name = person.names.first.given_name rescue nil 
+		patient.last_name = person.names.first.family_name rescue nil 
+		patient.sex = sex(person)
+		patient.age = age(person, current_date)
+		patient.age_in_months = age_in_months(person, current_date)
+		patient.dead = person.dead
+		patient.birth_date = birthdate_formatted(person)
+		patient.birthdate_estimated = person.birthdate_estimated
+		patient.home_district = person.addresses.first.address2
+		patient.traditional_authority = person.addresses.first.county_district
+		patient.current_residence = person.addresses.first.city_village
+		patient.landmark = person.addresses.first.address1
+		patient.mothers_surname = person.names.first.family_name2
+		patient.eid_number = get_patient_identifier(person.patient, 'EID Number') rescue nil
+		patient.pre_art_number = get_patient_identifier(person.patient, 'Pre ART Number (Old format)') rescue nil
+		patient.archived_filing_number = get_patient_identifier(person.patient, 'Archived filing number') rescue nil
+		patient.filing_number = get_patient_identifier(person.patient, 'Filing Number')
+		patient.occupation = get_attribute(person, 'Occupation')
+		patient.cell_phone_number = get_attribute(person, 'Cell phone number')
+		patient.office_phone_number = get_attribute(person, 'Office phone number')
+		patient.home_phone_number = get_attribute(person, 'Home phone number')
+		patient.guardian = art_guardian(person.patient) rescue nil 
+		patient
+	end
   
   def self.art_guardian(patient)
     person_id = Relationship.find(:first,:order => "date_created DESC",
@@ -1109,7 +1099,7 @@ EOF
     people = []
     people = search_by_identifier(params[:identifier]) if params[:identifier]
     return people.first.id unless people.blank? || people.size > 1
-    people = Person.find(:all, :limit => 15,:include => [{:names => [:person_name_code]}, :patient], :conditions => [
+    people = Person.find(:all, :include => [{:names => [:person_name_code]}, :patient], :conditions => [
         "gender = ? AND \
      person_name.given_name = ? AND \
      person_name.family_name = ?",
@@ -1162,18 +1152,11 @@ people = Person.find(:all, :include => [{:names => [:person_name_code]}, :patien
   end
   
   def self.search_by_identifier(identifier)
-    identifier_with_dashes = identifier
-    identifier_without_dashes = identifier.gsub('-','') unless identifier.blank?
-    people = PatientIdentifier.find(:all,:conditions =>["voided = 0 AND (identifier = (?) OR 
-    identifier = (?))",identifier_without_dashes,identifier_with_dashes]).map{|id| 
-      id.patient.person
-    } unless identifier.blank? rescue nil
-=begin    
     people = PatientIdentifier.find_all_by_identifier(identifier).map{|id| 
       id.patient.person
     } unless identifier.blank? rescue nil
-=end
     return people unless people.blank?
+
     create_from_dde_server = CoreService.get_global_property_value('create.from.dde.server').to_s == "true" rescue false
     if create_from_dde_server 
       dde_server = GlobalProperty.find_by_property("dde_server_ip").property_value rescue ""
@@ -1491,7 +1474,7 @@ people = Person.find(:all, :include => [{:names => [:person_name_code]}, :patien
 
   def self.get_national_id_with_dashes(patient, force = true)
     id = self.get_national_id(patient, force)
-    length = id.length 
+    length = id.length
     case length
       when 13
         id[0..4] + "-" + id[5..8] + "-" + id[9..-1] rescue id
@@ -1531,25 +1514,63 @@ people = Person.find(:all, :include => [{:names => [:person_name_code]}, :patien
   end
 
   def self.date_antiretrovirals_started(patient)
-    start_date = ActiveRecord::Base.connection.select_value <<EOF                   
-SELECT earliest_start_date FROM earliest_start_date 
-WHERE patient_id = #{patient.id} LIMIT 1
-EOF
-     return start_date.to_date unless start_date.blank?
-     concept_id = ConceptName.find_by_name('Date antiretrovirals started').concept_id    
  
-    start_date = ActiveRecord::Base.connection.select_value <<EOF                   
-SELECT value_text FROM start_date_observation 
-WHERE person_id = #{patient.id} AND concept_id = #{concept_id} LIMIT 1
-EOF
+    concept_id = ConceptName.find_by_name('Date antiretrovirals started').concept_id  
 
-     return start_date.to_date rescue nil
+    start_date = ActiveRecord::Base.connection.select_value "
+      SELECT earliest_start_date FROM earliest_start_date
+      WHERE patient_id = #{patient.id} LIMIT 1"
+
+    start_date.to_date rescue nil
   end
   
-   def self.previous_referral_section(person_obj,session_date)
+  def self.date_dispensation_date_after(patient, date_after)
+    
+    arv_concept = ConceptName.find_by_name("ANTIRETROVIRAL DRUGS").concept_id
+    
+    start_date = ActiveRecord::Base.connection.select_value "
+    SELECT DATE(obs.obs_datetime) AS obs_datetime 
+    FROM drug_order d 
+        LEFT JOIN orders o ON d.order_id = o.order_id
+        LEFT JOIN obs ON d.order_id = obs.order_id
+    WHERE d.drug_inventory_id IN (SELECT drug_id FROM drug WHERE concept_id IN (SELECT concept_id FROM concept_set WHERE concept_set = #{arv_concept})) 
+        AND quantity > 0
+        AND obs.voided = 0
+        AND o.voided = 0
+        AND obs.person_id = #{patient.id}
+        AND DATE(obs.obs_datetime) > #{date_after}
+    ORDER BY obs.obs_datetime ASC
+    LIMIT 1
+    "
+    start_date.to_date rescue nil
+    
+  end
+  
+  def self.date_of_first_dispensation(patient)
+    
+    arv_concept = ConceptName.find_by_name("ANTIRETROVIRAL DRUGS").concept_id
+    
+    start_date = ActiveRecord::Base.connection.select_value "
+    SELECT DATE(obs.obs_datetime) AS obs_datetime 
+    FROM drug_order d 
+        LEFT JOIN orders o ON d.order_id = o.order_id
+        LEFT JOIN obs ON d.order_id = obs.order_id
+    WHERE d.drug_inventory_id IN (SELECT drug_id FROM drug WHERE concept_id IN (SELECT concept_id FROM concept_set WHERE concept_set = #{arv_concept})) 
+        AND quantity > 0
+        AND obs.voided = 0
+        AND o.voided = 0
+        AND obs.person_id = #{patient.id}
+    ORDER BY obs.obs_datetime ASC
+    LIMIT 1
+    "
+    start_date.to_date rescue nil
+    
+  end
+  
+  def self.previous_referral_section(person_obj,session_date)
 
     services = Observation.find(:all, :conditions => ["person_id = ? AND concept_id = ?", person_obj.id, ConceptName.find_by_name("SERVICES").concept_id], :order => "obs_datetime desc").uniq.reverse.first(5) rescue []
-		
+
 		previous_services = []
 		services.map do |service|
 			if service.obs_datetime.to_date < session_date
@@ -1557,6 +1578,12 @@ EOF
 			end
 		end
 		return previous_services
+  end
+  
+  def self.occupations
+    ['','Driver','Housewife','Messenger','Business','Farmer','Salesperson','Teacher',
+     'Student','Security guard','Domestic worker', 'Police','Office worker',
+     'Preschool child','Mechanic','Prisoner','Craftsman','Healthcare Worker','Soldier'].sort.concat(["Other","Unknown"])
   end
 
 end
