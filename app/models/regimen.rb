@@ -6,5 +6,5 @@ class Regimen < ActiveRecord::Base
   belongs_to :program, :conditions => {:retired => 0}
   has_many :regimen_drug_orders # no default scope
   named_scope :program, lambda {|program_id| {:conditions => {:program_id => program_id}}}
-  named_scope :criteria, lambda {|weight| {:conditions => ['min_weight <= ? AND max_weight >= ?', weight, weight]} unless weight.blank?}
+  named_scope :criteria, lambda {|weight| {:conditions => ['min_weight <= ? AND max_weight > ?', weight, weight]} unless weight.blank?}
 end
