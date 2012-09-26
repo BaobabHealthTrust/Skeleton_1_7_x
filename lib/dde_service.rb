@@ -128,8 +128,7 @@ module DDEService
               },
               "patient" => {
                 "identifiers" => {
-                  "diabetes_number" => "",
-                  "old_identification_number" => self.national_id
+                  "old_identification_number" => identifier
                 }
               },
               "attributes" => {
@@ -153,11 +152,11 @@ module DDEService
 
           self.set_identifier("Old Identification Number", current_national_id.identifier)
 
-          current_national_id.void("National ID version change")
-
           national_id = DDEService.create_patient_from_dde(person, true)
 
           self.set_identifier("National id", national_id)
+
+          current_national_id.void("National ID version change")
 
         end
       end
@@ -301,7 +300,7 @@ module DDEService
   end
 
 	def self.create_from_form(params)
-    
+
 		address_params = params["addresses"]
 		names_params = params["names"]
 		patient_params = params["patient"]
@@ -497,7 +496,7 @@ module DDEService
           },
           "patient"=>
             {"identifiers"=>
-              {"diabetes_number"=>""}},
+              {"old_identification_number" => params["person"]["patient"]["identifiers"]["old_identification_number"]}},
           "gender"=> person_params["gender"],
           "birthdate"=> birthdate,
           "birthdate_estimated"=> birthdate_estimated ,
@@ -517,17 +516,17 @@ module DDEService
       @dde_server_password = GlobalProperty.find_by_property("dde_server_password").property_value rescue ""
 
       uri = "http://#{@dde_server_username}:#{@dde_server_password}@#{@dde_server}/people.json/"
-      recieved_params = RestClient.post(uri,passed_params)
+      received_params = RestClient.post(uri,passed_params)
 
-      national_id = JSON.parse(recieved_params)["npid"]["value"]
+      national_id = JSON.parse(received_params)["npid"]["value"]
 
     else
-      national_id = params["person"]["patient"]["identifiers"]["National_id"]
+      national_id = params["person"]["patient"]["identifiers"]["old_identification_number"]
     end
 
     if (dont_recreate_local == false)
       person = self.create_from_form(params["person"])
-    
+
       identifier_type = PatientIdentifierType.find_by_name("National id") || PatientIdentifierType.find_by_name("Unknown id")
 
       person.patient.patient_identifiers.create("identifier" => national_id,
