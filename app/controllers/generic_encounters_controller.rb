@@ -627,15 +627,21 @@ class GenericEncountersController < ApplicationController
 	def observations
 		# We could eventually include more here, maybe using a scope with includes
 		@encounter = Encounter.find(params[:id], :include => [:observations])
-    observations = []
+		@child_obs = {}
+    	@observations = []
 		@encounter.observations.map do |obs|
+			next if !obs.obs_group_id.blank?
 			if ConceptName.find_by_concept_id(obs.concept_id).name.match(/location/)
 				obs.value_numeric = ""
-				observations << obs.to_s
+				@observations << obs
 			else
-				observations << obs.to_s
-		  end
-    end
+				@observations << obs
+		  	end
+			child_obs = Observation.find(:all, :conditions => ["obs_group_id = ?", obs.obs_id])
+			if child_obs
+				@child_obs[obs.obs_id] = child_obs
+			end
+    	end
 
 		render :layout => false
 	end
@@ -1234,7 +1240,7 @@ class GenericEncountersController < ApplicationController
         observation[:value_numeric] = observation[:value_numeric].to_f * 18 if ( observation[:measurement_unit] == "mmol/l")
         observation.delete(:measurement_unit)
       end
-
+      
       if(observation[:parent_concept_name])
         concept_id = Concept.find_by_name(observation[:parent_concept_name]).id rescue nil
         observation[:obs_group_id] = Observation.find(:first, :conditions=> ['value_coded = ? AND encounter_id = ?',concept_id, encounter.id]).id rescue ""
@@ -1259,50 +1265,8 @@ class GenericEncountersController < ApplicationController
 
     @patient = Patient.find(params[:encounter][:patient_id])
 
-    # redirect to a custom destination page 'next_url'
-    #if(params[:next_url])
-      redirect_to "/patients/show/#{@patient.patient_id}" and return
-    #else
-    #  redirect_to next_task(@patient)
-    #end
-
+    redirect_to "/patients/show/#{@patient.patient_id}" and return
   end
-
-	def test_create
-=begin
-		o = {:encounter_id => 26,
-			  :obs_group_id => "",
-			  :obs_datetime => Time.now,
-			  :person_id => 2,
-			  :value_numeric => "",
-			  :value_drug => "",
-			  :value_datetime => "",
-			  :value_boolean => "",
-			  :concept_name => "TB STATUS",
-			  :value_coded_or_text => "Confirmed TB NOT on treatment",
-			  :patient_id => "2",
-			  :value_modifier => "",
-			  :order_id => "",
-			  :value_coded => ""}
-
-=end
-		o = {:encounter_id => 26,
-			  :obs_datetime => Time.now,
-			  :person_id => 2,
-			  :concept_name => "TB STATUS",
-			  :value_coded_or_text => "Confirmed TB NOT on treatment",
-			  :patient_id => "2"
-			}
-
-		#raise current_user.to_yaml
-		#result = Observation.create(o)
-
-		result = Observation.new(o)
-		result.date_created = Time.now
-		result.creator = current_user
-		result.save
-		render :text => result.to_yaml
-	end
 
   private
 
