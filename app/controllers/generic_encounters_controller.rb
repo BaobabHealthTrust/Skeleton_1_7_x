@@ -1309,10 +1309,13 @@ class GenericEncountersController < ApplicationController
 				observation.delete(:measurement_unit)
 			end
 
-			if(observation[:parent_concept_name])
+			if(!observation[:parent_concept_name].blank?)
 				concept_id = Concept.find_by_name(observation[:parent_concept_name]).id rescue nil
 				observation[:obs_group_id] = Observation.find(:last, :conditions=> ['concept_id = ? AND encounter_id = ?', concept_id, encounter.id], :order => "obs_id ASC, date_created ASC").id rescue ""
 				observation.delete(:parent_concept_name)
+			else
+				observation.delete(:parent_concept_name)
+				observation.delete(:obs_group_id)
 			end
 
 			extracted_value_numerics = observation[:value_numeric]
