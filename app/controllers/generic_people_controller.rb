@@ -74,12 +74,17 @@ class GenericPeopleController < ApplicationController
 			else
 				# TODO - figure out how to write a test for this
 				# This is sloppy - creating something as the result of a GET
-				if create_from_remote        
+				if create_from_remote
 					found_person_data = PatientService.find_remote_person_by_identifier(params[:identifier])
-					found_person = PatientService.create_from_form(found_person_data['person']) unless found_person_data.nil?
+					found_person = PatientService.create_from_form(found_person_data['person']) unless found_person_data.blank?
 				end
 			end
 			if found_person
+
+        patient = DDEService::Patient.new(found_person.patient)
+
+        patient.check_old_national_id(params[:identifier])
+
 				if params[:relation]
 					redirect_to search_complete_url(found_person.id, params[:relation]) and return
 				else
@@ -87,16 +92,23 @@ class GenericPeopleController < ApplicationController
 				end
 			end
 		end
+
+		records_per_page = CoreService.get_global_property_value('records_per_page') || 15
 		@relation = params[:relation]
 		@people = PatientService.person_search(params)
 		@patients = []
-		@people.each do | person |
+
+    unless @people.nil?
+			@current_page = @people.paginate(:page => params[:page], :per_page => records_per_page.to_i)
+		end
+
+		@current_page.each do | person |
 			patient = PatientService.get_patient(person) rescue nil
 			@patients << patient
 		end
 
 	end
-
+  
   def search_from_dde
 		found_person = PatientService.person_search_from_dde(params)
     if found_person
