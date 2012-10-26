@@ -99,10 +99,10 @@ module MedicationService
 	def self.fully_specified_frequencies
 		concept_id = ConceptName.find_by_name('DRUG FREQUENCY CODED').concept_id
 		set = ConceptSet.find_all_by_concept_set(concept_id, :order => 'sort_weight')
-		frequencies = {}
+		frequencies = []
 		options = set.each{ | item | 
 			next if item.concept.blank?
-			frequencies[item.concept.shortname] = item.concept.fullname + "(" + item.concept.shortname + ")"
+			frequencies << [item.concept.shortname, item.concept.fullname + "(" + item.concept.shortname + ")"]
 		}
 		frequencies
 	end

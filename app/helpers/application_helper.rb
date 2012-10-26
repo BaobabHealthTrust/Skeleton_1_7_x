@@ -96,6 +96,10 @@ module ApplicationHelper
     get_global_property_value("dc.number.prefix") rescue ""
   end
 
+	def advanced_prescription_interface
+		get_global_property_value("advanced.prescription.interface").to_s == "true" rescue false
+	end
+
 	def get_global_property_value(global_property)
 		property_value = Settings[global_property] 
 		if property_value.nil?
@@ -257,6 +261,7 @@ module ApplicationHelper
     user_roles = UserRole.find(:all,:conditions =>["user_id = ?", current_user.id]).collect{|r|r.role}
     RoleRole.find(:all,:conditions => ["child_role IN (?)", user_roles]).collect{|r|user_roles << r.parent_role}
     return user_roles.uniq
+    
   end
 
   def suggested_return_date(patient,dispensed_date)
@@ -303,10 +308,6 @@ module ApplicationHelper
     return return_date
   end
 
-	def advanced_prescription_interface
-		get_global_property_value("advanced.prescription.interface")  
-	end
-	
   def current_program_location                                                  
     current_user_activities = current_user.activities                      
     if Location.current_location.name.downcase == 'outpatient'                  
