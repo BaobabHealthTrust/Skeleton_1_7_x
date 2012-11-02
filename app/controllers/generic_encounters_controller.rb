@@ -487,7 +487,7 @@ class GenericEncountersController < ApplicationController
     # only redirect to next task if location parameter has not been provided
 
     
-    unless params[:location]
+    unless params[:location].blank?
     #find a way of printing the lab_orders labels
      if params['encounter']['encounter_type_name'] == "LAB ORDERS"
        redirect_to"/patients/print_lab_orders/?patient_id=#{@patient.id}"

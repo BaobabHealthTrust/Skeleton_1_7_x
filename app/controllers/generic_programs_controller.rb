@@ -197,7 +197,7 @@ class GenericProgramsController < ApplicationController
                                      "patient_program_id = #{patient_program.patient_program_id}"
         end
         #for import
-         unless params[:location]
+         unless params[:location].blank?
             redirect_to :controller => :patients, :action => :programs_dashboard, :patient_id => params[:patient_id]
          else
             render :text => "import suceeded" and return

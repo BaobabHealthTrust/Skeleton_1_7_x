@@ -71,7 +71,7 @@ class GenericPrescriptionsController < ApplicationController
       end  
     end
 
-    unless params[:location]
+    unless params[:location].blank?
       redirect_to (params[:auto] == '1' ? "/prescriptions/auto?patient_id=#{@patient.id}" : "/patients/treatment_dashboard/#{@patient.id}")
     else
       render :text => 'import success' and return
